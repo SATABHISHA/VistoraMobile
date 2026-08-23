@@ -118,6 +118,67 @@ class MrRepository {
     MrVisitReport.fromJson,
   );
 
+  Future<MrPage<MrExpenseClaim>> expenseClaims({
+    String? query,
+    String? status,
+    String? date,
+    int? month,
+    int? year,
+    bool mine = false,
+    bool reviewable = false,
+    int page = 1,
+    int perPage = 10,
+  }) async => _list(
+    '/mr/expense-claims',
+    {
+      'q': ?query,
+      'status': ?status,
+      'date': ?date,
+      'month': ?month,
+      'year': ?year,
+      if (mine) 'mine': 1,
+      if (reviewable) 'reviewable': 1,
+    },
+    page,
+    perPage,
+    MrExpenseClaim.fromJson,
+  );
+
+  Future<int> saveExpenseClaim({
+    int? id,
+    required Map<String, dynamic> data,
+  }) async {
+    final response = id == null
+        ? await _api.post('/mr/expense-claims', data: data)
+        : await _api.put('/mr/expense-claims/$id', data: data);
+    return asInt(asMap(asMap(response['data'])['item'])['id'], id ?? 0);
+  }
+
+  Future<void> deleteExpenseClaim(int id) =>
+      _api.delete('/mr/expense-claims/$id');
+
+  Future<void> submitExpenseClaim(int id) =>
+      _api.post('/mr/expense-claims/$id/submit');
+
+  Future<void> rollbackExpenseClaim(int id, String notes) => _api.post(
+    '/mr/expense-claims/$id/rollback-submission',
+    data: {'rollback_notes': notes},
+  );
+
+  Future<void> approveExpenseClaim(int id, {String? notes}) => _api.post(
+    '/mr/expense-claims/$id/approve',
+    data: {
+      if (notes != null && notes.trim().isNotEmpty)
+        'review_notes': notes.trim(),
+    },
+  );
+
+  Future<void> rejectExpenseClaim(int id, String notes) =>
+      _api.post('/mr/expense-claims/$id/reject', data: {'review_notes': notes});
+
+  Future<void> revertExpenseReview(int id, String notes) =>
+      _api.post('/mr/expense-claims/$id/revert', data: {'review_notes': notes});
+
   Future<void> saveDoctor({int? id, required Map<String, dynamic> data}) =>
       id == null
       ? _api.post('/mr/doctors', data: data)

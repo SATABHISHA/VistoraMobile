@@ -80,6 +80,15 @@ flutter build ios --no-codesign --dart-define=APP_ENV=staging --dart-define=API_
 
 Sanctum tokens are stored with `flutter_secure_storage`. Widgets do not perform raw HTTP requests. Routing responds to session restoration, logout and API 401 responses.
 
+## Implemented workspaces
+
+- Employee/Supervisor: dashboard, attendance, leave, holidays, payslips, assigned projects, performance history, interview-panel feedback and profile/security.
+- Admin/HR: employee directory, team attendance and leave actions, salary structures/revisions, payroll, recruitment, interview scheduling, offer letters, appointment letters, F&F settlements, secure files and company settings.
+- MR: doctor-location management, subordinate assignment, visit capture/review/audit and MR Field Expenses with approval and payroll reimbursement inclusion/reversal.
+- Superadmin: platform overview, companies, payments and onboarding.
+
+The component/formula Salary Designer remains a desktop authoring surface because it configures complex pay templates. Flutter consumes the resulting authoritative structures and supports operational year search, detail, revisions, arrears and latest-revision rollback.
+
 ## Device permissions
 
 - Android: coarse and fine location are declared for attendance and MR visit geofence validation.
@@ -90,6 +99,8 @@ Sanctum tokens are stored with `flutter_secure_storage`. Widgets do not perform 
 The Holidays feature uses tenant-scoped Laravel database persistence. Admin/HR users can manage the calendar; all authenticated tenant users can view it. The Laravel Blade settings and employee portal consume the same API, so holiday data is no longer device/browser-specific.
 
 The MR workspace is available only when the tenant MR feature is enabled. It provides mapped doctor locations, an audited per-doctor location limit, subordinate-scoped planning, searchable/paginated records, dependent location selection, GPS/geofence visit reporting, employee submission rollback, and role-authorized review. Legacy territories remain a backend compatibility detail and are not required by the mobile assignment flow.
+
+MR Field Expenses mirror the client workbook's daily HQ, EX HQ and Outstation statement. Employee identity/designation/headquarters are sourced from Laravel; expense totals, review authority and payroll inclusion are calculated and enforced by Laravel. Only approved claims for the payroll month can be included, and both bulk and individual inclusion have an auditable reversal.
 
 Payslip PDFs are generated from the authenticated payslip API payload, matching the existing Laravel employee portal behavior, and can be previewed, printed or shared using the native platform sheet.
 

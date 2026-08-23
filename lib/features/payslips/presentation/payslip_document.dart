@@ -98,6 +98,11 @@ Future<Uint8List> buildPayslipPdf({
             money.format(payslip.attendanceDeduction),
           ),
           _amount('Arrears / Adjustments', money.format(payslip.arrearsAmount)),
+          if (payslip.mrExpenseAmount > 0)
+            _amount(
+              'Approved MR Field Expenses',
+              money.format(payslip.mrExpenseAmount),
+            ),
           pw.SizedBox(height: 16),
           pw.Container(
             padding: const pw.EdgeInsets.all(15),

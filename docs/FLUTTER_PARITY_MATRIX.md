@@ -1,33 +1,72 @@
 # Flutter parity matrix
 
-Status meanings: Not Started, Blocked by API, In Progress, Implemented, Tested, Verified, Not Applicable to Mobile.
+Status meanings: **Implemented** is API-connected, **Tested** has automated coverage, and **Verified** has also passed the current static-analysis/build gate. Desktop-only authoring tools are marked **Not Applicable to Mobile** only where the operational result is fully available on mobile.
 
-| Feature | Roles | API status | Flutter status | Verification |
+## Foundation and access
+
+| Feature | Roles | Laravel/API | Flutter | Evidence |
 |---|---|---|---|---|
-| Environment configuration | All | N/A | Verified | Analyze, tests, and Android debug build pass |
-| Central API/error layer | All | Existing conventions supported | Implemented | Analyze and Android build pass; endpoint integration journeys remain |
-| Secure Sanctum token storage | All | Ready | Implemented | Android build verified; device journey remains |
-| Login and session restoration | All | Extended bootstrap contract | Tested | Laravel contract and Flutter parsing tests pass; device journey remains |
-| Forgot password | All | Ready | Implemented | Integration test pending |
-| Change password | All | Added in Phase 2 | Tested | Laravel feature test passes; device journey remains |
-| Role/permission state | All | Extended bootstrap contract | Tested | Laravel contract and Flutter parsing tests pass |
-| Tenant feature state | Tenant users | Extended bootstrap contract | Tested | Laravel contract and Flutter parsing tests pass |
-| Guarded routing | All | N/A | Tested | Flutter widget test passes |
-| Responsive theme/shared UI | All | N/A | Tested | Flutter widget test and Android build pass |
-| Role-aware dashboard | All tenant roles | Existing dashboard APIs | Tested | Admin pending leave actions; Employee/Supervisor next-three-day MR visits; animated logout confirmation |
-| Attendance/GPS | Employee/Admin/HR/Supervisor | Ready; calendar ID added in Phase 3 | Tested | Employee punch/calendar; Admin tenant roster; Supervisor searchable subordinate roster, detail, location and calendar |
-| Leave | Employee/Admin/HR/Supervisor | Search/status and decision APIs ready | Tested | Employee apply/history; Admin tenant approvals; Supervisor subordinate approve/reject/revert; pending dashboard count |
-| Payslips | Role scoped | Period/search API ready | Tested | Employee/Supervisor self-only month/year list; Admin employee search, period filter, pagination, detail and PDF preview/share |
-| Employee project assignments | Role scoped | Ready when enabled | Tested | Assignment list and employee progress submission implemented; typed-model tests pass |
-| Employee performance history | Role scoped | Ready | Tested | Score history and comments implemented; typed models used |
-| Interview panel tasks | Assigned panelists | Ready | Tested | Assigned interviews and feedback create/update implemented; typed-model tests pass |
-| Employees/subordinates | Admin/HR/Supervisor | Existing employee/attendance APIs | Tested | Role-labelled navigation; searchable subordinate attendance and employee detail sheet |
-| Payroll/salary | Admin/HR | Calculation, hold, release, arrears and rollback APIs ready | Tested | Full mobile cycle actions plus server-authoritative leave/absence/holiday deductions and per-employee controls |
-| Recruitment | Admin/HR | Partial API | Blocked by API | Phase 4/6
-| File manager | Admin/HR | Ready when enabled | Not Started | Phase 4
-| MR employee visits | Employee | Extended feature-gated API | Tested | Own paginated schedule/history, animated details, GPS/geofence or unrestricted capture, draft submission and noted rollback use typed models |
-| MR supervisor workflow | Supervisor | Extended role-scoped API | Tested | Doctor/location CRUD, tenant MR setting, subordinate-only assignment and report review; all lists are searchable/filterable/paginated |
-| MR administration | Admin/HR | Extended feature-gated API | Tested | Doctor-location mapping limit, dependent assignment locations, immutable submitted assignments, report review and audit log implemented |
-| MR tenant feature guard | Tenant users | Existing `/mr/status` and auth feature state | Tested | Navigation and route are hidden/guarded when disabled |
-| Holidays | All/Admin/HR | Added tenant-scoped persistence/API | Tested | Database-backed calendar, upcoming dashboard data, Admin/HR CRUD; Laravel tests and Flutter model tests pass |
-| Superadmin | Superadmin | Mostly ready | Not Started | Phase 6
+| Environment configuration | All | Existing | Verified | Local/staging/production `dart-define` support; Android emulator, LAN-device and iOS simulator guidance |
+| Central API/error layer | All | Existing response conventions | Verified | One Dio client handles auth, 401/403/404/422/429/5xx, timeout, upload and download |
+| Sanctum login/session/logout | All | Existing plus mobile bootstrap | Tested | Secure storage, restoration, expiry handling and animated logout confirmation |
+| Role, permission and tenant feature state | All | `/auth/me` | Tested | Route guards and role-aware navigation; Laravel remains authoritative |
+| Responsive navigation/accessibility | All | N/A | Tested | Shared bottom navigation, Android back behavior, SafeArea, scalable layouts and semantic controls |
+
+## Employee and supervisor workflows
+
+| Feature | Roles | Laravel/API | Flutter | Evidence |
+|---|---|---|---|---|
+| Role-aware dashboard | All tenant roles | Existing dashboard endpoints | Tested | Employee/Supervisor own metrics, manager pending actions, holidays and next-three-day MR visits |
+| Own attendance and GPS punch | Employee, Supervisor | Ready | Tested | Clock-in/out, server geofence, current state, monthly calendar, in/out time and worked hours |
+| Tenant/subordinate attendance | Admin, HR, Supervisor | Ready | Tested | Search by name/code, employee details, live punch/location and monthly calendar |
+| Own leave | Employee, Supervisor | Ready | Tested | Correct approved-used balance, apply, status history, filters and pagination |
+| Leave review | Admin, HR, Supervisor | Ready | Tested | Pending/approved/rejected tabs, live search, subordinate scope and approve/reject/revert |
+| Holidays | All; Admin/HR writes | Database-backed API | Tested | Upcoming dashboard, calendar and manager CRUD; no browser-storage source of truth |
+| Personal payslips | Employee, Supervisor | Self-scoped | Tested | Month/year pagination, brief cards, detail and tenant-branded PDF preview/share |
+| Admin payslip directory | Admin, HR | Tenant-scoped search/filter API | Tested | Employee identity, month/year/search/pagination and detailed salary statement |
+| Profile and security | All | Ready | Tested | Profile display and password change |
+| Assigned project work | Employee, Supervisor | Feature-gated | Tested | Own assignments and progress submissions |
+| Performance history | Employee, Supervisor | Ready | Tested | Role-scoped review history and typed scores |
+| Interview panel work | Assigned panelists | Ready | Tested | Assigned schedules and create/update feedback |
+
+## HR and payroll administration
+
+| Feature | Roles | Laravel/API | Flutter | Evidence |
+|---|---|---|---|---|
+| Employee directory | Admin, HR | Search/status/pagination | Tested | Add/edit, activate/deactivate, credentials, salary snapshot and attendance links |
+| Salary structures and revisions | Admin, HR | Existing APIs plus optional mobile pagination/search | Tested | Search/year roster, structure detail, revision/arrears history and safe latest-revision rollback |
+| Component/formula Salary Designer | Admin, HR | Existing web designer | Not Applicable to Mobile | Formula/template authoring remains desktop; configured structures and operational revisions are available on mobile |
+| Payroll cycles | Admin, HR | Ready | Tested | Initiate, attendance deduction calculation/rollback, hold, release workflow, arrears and employee controls |
+| MR expense payroll inclusion | Admin, HR | Added | Tested | Approved same-month claims, multi-select/bulk or individual include, reversible ledger and released-cycle lock |
+| Recruitment pipeline | Admin, HR | Ready | Tested | Search, status pipeline actions, candidate creation and interview scheduling |
+| Offer letters | Admin, HR | Added persistent offers | Tested | Template authoring, tenant-branded generation, preview, list/filter and status actions |
+| Appointment letters | Admin, HR | Ready | Tested | Employee/template selection, generation, paginated list and preview |
+| Full & Final settlements | Admin, HR | Ready | Tested | Calculate, edit, review/approve/revoke and multi-record disbursement |
+| Secure file manager | Admin, HR | Ready with optional pagination/search | Tested | Quota, folders, employee folders, upload, download/open and delete |
+| Company settings | Admin, HR | Existing settings APIs | Tested | Company profile, organisation masters, geofence and SMTP settings/test |
+| Platform administration | Superadmin | Existing plus paginated payment endpoint | Tested | Overview, companies, payments and onboarding workspaces with dedicated navigation |
+| Public candidate application and employee invitation forms | Public links | Existing browser endpoints | Not Applicable to Mobile | These links intentionally open as responsive web onboarding forms; managers create employees directly in mobile |
+
+## Medical Representative module
+
+All rows are feature-gated by the authenticated tenant's MR setting and server-side tenant scope.
+
+| Feature | Roles | Laravel/API | Flutter | Evidence |
+|---|---|---|---|---|
+| Doctors and mapped locations | Admin, HR, Supervisor | Extended | Tested | Search/pagination, CRUD, location mapping and configurable per-doctor limit |
+| MR locations/geofence | Admin, HR, Supervisor | Extended | Tested | State/branch/business-unit fields, optional coordinates/radius and CRUD |
+| Assignment planning | Admin, HR, Supervisor | Extended | Tested | Subordinate scope, searchable doctor, dependent mapped location, edit/delete before report submission |
+| Employee visit reporting | Employee, Supervisor | Extended | Tested | Dashboard schedule, detail, GPS capture, optional geofence, draft/submit and noted rollback |
+| Visit report review | Admin, HR, Supervisor | Extended | Tested | Employee/doctor/date/year search, pagination and subordinate-scoped approve/reject/revert |
+| MR audit log | Admin, HR, Supervisor | Extended | Implemented | Actor, action, before/after context and employee scope are API-backed |
+| MR Field Expenses — own claims | Employee, Supervisor | Added | Tested | HQ/EX HQ/Outstation daily form, server totals, draft/edit/submit/rollback, search and month/year filters |
+| MR Field Expenses — approvals | Admin, HR, Supervisor | Added | Tested | Supervisor subordinate-only queue; Admin/HR review Supervisor and employee claims; approve/reject/revert |
+| Legacy territory records | Managers | Existing compatibility API | Not Applicable to Mobile | New assignment flow intentionally uses doctor-location mappings without employee-area restrictions |
+
+## Current verification boundary
+
+- Laravel feature suite: all current feature tests pass.
+- Flutter formatting, analysis and automated tests pass on the current code.
+- Android debug APK build passes on the current code.
+- iOS compilation requires macOS/Xcode and is therefore reviewed/configured, not built on this Windows host.
+- Live deployment and live migrations are outside this local implementation unless explicitly requested in a separate deployment instruction.

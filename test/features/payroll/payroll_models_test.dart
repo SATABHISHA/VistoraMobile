@@ -11,6 +11,7 @@ void main() {
       'statutory_deduction_amount': '3000.00',
       'attendance_deduction_amount': '6000.00',
       'arrears_amount': '500.00',
+      'mr_expense_amount': '875.50',
       'net_payable': '51500.00',
       'employee': {
         'emp_code': 'EMP007',
@@ -40,6 +41,7 @@ void main() {
     expect(payroll.missingAttendanceDays, 2);
     expect(payroll.holidayDays, 1);
     expect(payroll.attendanceDeduction, 6000);
+    expect(payroll.mrExpense, 875.50);
     expect(payroll.netPayable, 51500);
   });
 }

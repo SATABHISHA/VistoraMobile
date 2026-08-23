@@ -167,6 +167,11 @@ class _PayrollAdminScreenState extends ConsumerState<PayrollAdminScreen> {
                         Text(
                           '${cycle.employees.length} employees • ${_money(cycle.totalPayroll)} total payroll',
                         ),
+                        if (collection.mrEnabled)
+                          Text(
+                            'Approved field expenses included: ${_money(cycle.mrExpenseTotal)}',
+                            style: const TextStyle(color: VistoraColors.green),
+                          ),
                         const SizedBox(height: 12),
                         if (cycle.status != 'released')
                           Wrap(
@@ -191,6 +196,28 @@ class _PayrollAdminScreenState extends ConsumerState<PayrollAdminScreen> {
                                 icon: const Icon(Icons.undo),
                                 label: const Text('Rollback Deductions'),
                               ),
+                              if (collection.mrEnabled)
+                                FilledButton.tonalIcon(
+                                  onPressed: mutating
+                                      ? null
+                                      : () => _bulkMrExpense(
+                                          cycle,
+                                          include: true,
+                                        ),
+                                  icon: const Icon(Icons.receipt_long_outlined),
+                                  label: const Text('Include Field Expenses'),
+                                ),
+                              if (collection.mrEnabled)
+                                OutlinedButton.icon(
+                                  onPressed: mutating
+                                      ? null
+                                      : () => _bulkMrExpense(
+                                          cycle,
+                                          include: false,
+                                        ),
+                                  icon: const Icon(Icons.undo),
+                                  label: const Text('Revert Field Expenses'),
+                                ),
                               OutlinedButton.icon(
                                 onPressed: mutating || cycle.status == 'on_hold'
                                     ? null
@@ -239,6 +266,19 @@ class _PayrollAdminScreenState extends ConsumerState<PayrollAdminScreen> {
                       ),
                     ),
                     addArrears: () => _addArrears(cycle, item),
+                    mrEnabled: collection.mrEnabled,
+                    includeMrExpense: () => mutate(
+                      () => repository.calculateMrExpenses(
+                        cycle.id,
+                        employeeIds: [item.employeeId],
+                      ),
+                    ),
+                    rollbackMrExpense: () => mutate(
+                      () => repository.rollbackMrExpenses(
+                        cycle.id,
+                        employeeIds: [item.employeeId],
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -255,6 +295,161 @@ class _PayrollAdminScreenState extends ConsumerState<PayrollAdminScreen> {
       'This removes attendance and leave deductions for the selected cycle. They can be calculated again.',
     );
     if (yes) await mutate(() => repository.rollbackDeductions(cycle.id));
+  }
+
+  Future<void> _bulkMrExpense(
+    PayrollCycleSummary cycle, {
+    required bool include,
+  }) async {
+    final ids = await _selectEmployees(
+      cycle,
+      include ? 'Include approved field expenses' : 'Revert field expenses',
+    );
+    if (ids == null || ids.isEmpty || !mounted) return;
+    await mutate(
+      () => include
+          ? repository.calculateMrExpenses(cycle.id, employeeIds: ids)
+          : repository.rollbackMrExpenses(cycle.id, employeeIds: ids),
+    );
+  }
+
+  Future<List<int>?> _selectEmployees(
+    PayrollCycleSummary cycle,
+    String title,
+  ) async {
+    final selected = cycle.employees.map((item) => item.employeeId).toSet();
+    final search = TextEditingController();
+    var query = '';
+    final result = await showModalBottomSheet<List<int>>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final visible = cycle.employees.where((item) {
+            final needle = query.trim().toLowerCase();
+            return needle.isEmpty ||
+                item.employeeName.toLowerCase().contains(needle) ||
+                item.employeeCode.toLowerCase().contains(needle);
+          }).toList();
+          return DraggableScrollableSheet(
+            expand: false,
+            initialChildSize: .78,
+            minChildSize: .45,
+            maxChildSize: .94,
+            builder: (context, controller) => Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 18, 18, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: search,
+                        onChanged: (value) =>
+                            setSheetState(() => query = value),
+                        decoration: const InputDecoration(
+                          prefixIcon: Icon(Icons.search),
+                          hintText: 'Search employee name or ID',
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          TextButton(
+                            onPressed: () => setSheetState(
+                              () => selected.addAll(
+                                visible.map((item) => item.employeeId),
+                              ),
+                            ),
+                            child: const Text('Select all shown'),
+                          ),
+                          TextButton(
+                            onPressed: () => setSheetState(
+                              () => selected.removeAll(
+                                visible.map((item) => item.employeeId),
+                              ),
+                            ),
+                            child: const Text('Clear shown'),
+                          ),
+                          const Spacer(),
+                          Text('${selected.length} selected'),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: ListView.builder(
+                    controller: controller,
+                    itemCount: visible.length,
+                    itemBuilder: (context, index) {
+                      final item = visible[index];
+                      return CheckboxListTile(
+                        value: selected.contains(item.employeeId),
+                        onChanged: (checked) => setSheetState(() {
+                          if (checked == true) {
+                            selected.add(item.employeeId);
+                          } else {
+                            selected.remove(item.employeeId);
+                          }
+                        }),
+                        title: Text(
+                          item.employeeName,
+                          style: const TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                        subtitle: Text(
+                          '${item.employeeCode} • Current field expense ${_money(item.mrExpense)}',
+                        ),
+                        secondary: CircleAvatar(
+                          child: Text(
+                            item.employeeName.characters.first.toUpperCase(),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(18),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.pop(sheetContext),
+                          child: const Text('Cancel'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: selected.isEmpty
+                              ? null
+                              : () => Navigator.pop(
+                                  sheetContext,
+                                  selected.toList(),
+                                ),
+                          child: const Text('Apply to selected'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+    search.dispose();
+    return result;
   }
 
   Future<void> _confirmCycleRollback(PayrollCycleSummary cycle) async {
@@ -356,12 +551,18 @@ class _EmployeePayrollCard extends StatelessWidget {
     required this.calculate,
     required this.rollback,
     required this.addArrears,
+    required this.mrEnabled,
+    required this.includeMrExpense,
+    required this.rollbackMrExpense,
   });
   final PayrollEmployeeSummary item;
   final bool enabled;
   final VoidCallback calculate;
   final VoidCallback rollback;
   final VoidCallback addArrears;
+  final bool mrEnabled;
+  final VoidCallback includeMrExpense;
+  final VoidCallback rollbackMrExpense;
 
   @override
   Widget build(BuildContext context) => Card(
@@ -395,6 +596,17 @@ class _EmployeePayrollCard extends StatelessWidget {
             'Paid leave ${item.paidLeaveDays} • Pending leave ${item.pendingLeaveDays} • Missing check-in ${item.missingAttendanceDays} • Holidays ${item.holidayDays}',
             style: Theme.of(context).textTheme.bodySmall,
           ),
+          if (mrEnabled)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                'Approved field expenses: ${_money(item.mrExpense)}',
+                style: const TextStyle(
+                  color: VistoraColors.green,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
           const SizedBox(height: 8),
           Wrap(
             alignment: WrapAlignment.end,
@@ -415,6 +627,18 @@ class _EmployeePayrollCard extends StatelessWidget {
                 icon: const Icon(Icons.add_card_outlined),
                 label: const Text('Add arrears'),
               ),
+              if (mrEnabled)
+                TextButton.icon(
+                  onPressed: enabled ? includeMrExpense : null,
+                  icon: const Icon(Icons.receipt_long_outlined),
+                  label: const Text('Add field expense'),
+                ),
+              if (mrEnabled && item.mrExpense > 0)
+                TextButton.icon(
+                  onPressed: enabled ? rollbackMrExpense : null,
+                  icon: const Icon(Icons.undo),
+                  label: const Text('Undo field expense'),
+                ),
             ],
           ),
         ],

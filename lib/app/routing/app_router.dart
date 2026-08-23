@@ -10,12 +10,18 @@ import 'package:vistora_mobile/features/auth/presentation/forgot_password_screen
 import 'package:vistora_mobile/features/auth/presentation/login_screen.dart';
 import 'package:vistora_mobile/features/auth/presentation/splash_screen.dart';
 import 'package:vistora_mobile/features/dashboard/presentation/dashboard_screen.dart';
+import 'package:vistora_mobile/features/employees/presentation/employee_management_screen.dart';
+import 'package:vistora_mobile/features/file_manager/presentation/file_manager_screen.dart';
 import 'package:vistora_mobile/features/leave/presentation/leave_screen.dart';
 import 'package:vistora_mobile/features/holidays/presentation/holidays_screen.dart';
+import 'package:vistora_mobile/features/hr_operations/presentation/hr_operations_screen.dart';
 import 'package:vistora_mobile/features/mr/presentation/mr_screen.dart';
 import 'package:vistora_mobile/features/payslips/presentation/payslips_screen.dart';
 import 'package:vistora_mobile/features/payroll/presentation/payroll_admin_screen.dart';
+import 'package:vistora_mobile/features/platform_admin/presentation/platform_admin_screen.dart';
 import 'package:vistora_mobile/features/profile/presentation/profile_screen.dart';
+import 'package:vistora_mobile/features/salary/presentation/salary_management_screen.dart';
+import 'package:vistora_mobile/features/tenant_settings/presentation/tenant_settings_screen.dart';
 import 'package:vistora_mobile/features/work/presentation/employee_work_screen.dart';
 
 final _routerRefreshProvider = Provider<ValueNotifier<AuthStatus>>((ref) {
@@ -61,6 +67,41 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           !const {'admin', 'hr'}.contains(auth.session?.user.normalizedRole)) {
         return '/dashboard';
       }
+      if (auth.status == AuthStatus.authenticated &&
+          path == '/hr-operations' &&
+          !const {'admin', 'hr'}.contains(auth.session?.user.normalizedRole)) {
+        return '/dashboard';
+      }
+      if (auth.status == AuthStatus.authenticated &&
+          path == '/file-manager' &&
+          (auth.session?.features.fileManager != true ||
+              !const {
+                'admin',
+                'hr',
+                'superadmin',
+              }.contains(auth.session?.user.normalizedRole))) {
+        return '/dashboard';
+      }
+      if (auth.status == AuthStatus.authenticated &&
+          path.startsWith('/platform') &&
+          auth.session?.user.normalizedRole != 'superadmin') {
+        return '/dashboard';
+      }
+      if (auth.status == AuthStatus.authenticated &&
+          path == '/company-settings' &&
+          !const {'admin', 'hr'}.contains(auth.session?.user.normalizedRole)) {
+        return '/dashboard';
+      }
+      if (auth.status == AuthStatus.authenticated &&
+          path == '/employees' &&
+          !const {'admin', 'hr'}.contains(auth.session?.user.normalizedRole)) {
+        return '/dashboard';
+      }
+      if (auth.status == AuthStatus.authenticated &&
+          path == '/salary-structures' &&
+          !const {'admin', 'hr'}.contains(auth.session?.user.normalizedRole)) {
+        return '/dashboard';
+      }
       return null;
     },
     routes: [
@@ -93,7 +134,19 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/team-attendance',
-            builder: (context, state) => const TeamAttendanceScreen(),
+            builder: (context, state) => TeamAttendanceScreen(
+              initialQuery: state.uri.queryParameters['q'],
+            ),
+          ),
+          GoRoute(
+            path: '/employees',
+            builder: (context, state) => const EmployeeManagementScreen(),
+          ),
+          GoRoute(
+            path: '/salary-structures',
+            builder: (context, state) => SalaryManagementScreen(
+              initialQuery: state.uri.queryParameters['q'],
+            ),
           ),
           GoRoute(
             path: '/leave',
@@ -115,7 +168,38 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             path: '/payroll-admin',
             builder: (context, state) => const PayrollAdminScreen(),
           ),
+          GoRoute(
+            path: '/hr-operations',
+            builder: (context, state) => const HrOperationsScreen(),
+          ),
+          GoRoute(
+            path: '/file-manager',
+            builder: (context, state) => const FileManagerScreen(),
+          ),
+          GoRoute(
+            path: '/company-settings',
+            builder: (context, state) => const TenantSettingsScreen(),
+          ),
           GoRoute(path: '/mr', builder: (context, state) => const MrScreen()),
+          GoRoute(
+            path: '/platform',
+            builder: (context, state) => const PlatformAdminScreen(),
+          ),
+          GoRoute(
+            path: '/platform/companies',
+            builder: (context, state) =>
+                const PlatformAdminScreen(initialIndex: 1),
+          ),
+          GoRoute(
+            path: '/platform/payments',
+            builder: (context, state) =>
+                const PlatformAdminScreen(initialIndex: 2),
+          ),
+          GoRoute(
+            path: '/platform/onboarding',
+            builder: (context, state) =>
+                const PlatformAdminScreen(initialIndex: 3),
+          ),
           GoRoute(
             path: '/projects',
             builder: (context, state) =>

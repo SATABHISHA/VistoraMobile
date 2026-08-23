@@ -7,6 +7,7 @@ class PayrollCycleSummary {
     required this.month,
     required this.status,
     required this.totalPayroll,
+    required this.mrExpenseTotal,
     required this.employees,
   });
 
@@ -15,6 +16,7 @@ class PayrollCycleSummary {
   final int month;
   final String status;
   final double totalPayroll;
+  final double mrExpenseTotal;
   final List<PayrollEmployeeSummary> employees;
 
   factory PayrollCycleSummary.fromJson(Map<String, dynamic> json) =>
@@ -24,6 +26,7 @@ class PayrollCycleSummary {
         month: asInt(json['month']),
         status: json['status']?.toString() ?? 'draft',
         totalPayroll: asDouble(json['total_payroll']),
+        mrExpenseTotal: asDouble(json['mr_expense_total']),
         employees: asList(
           json['employees'],
         ).map((item) => PayrollEmployeeSummary.fromJson(asMap(item))).toList(),
@@ -44,6 +47,7 @@ class PayrollEmployeeSummary {
     required this.statutoryDeduction,
     required this.attendanceDeduction,
     required this.arrears,
+    required this.mrExpense,
     required this.netPayable,
     required this.deductionDays,
     required this.paidLeaveDays,
@@ -64,6 +68,7 @@ class PayrollEmployeeSummary {
   final double statutoryDeduction;
   final double attendanceDeduction;
   final double arrears;
+  final double mrExpense;
   final double netPayable;
   final double deductionDays;
   final int paidLeaveDays;
@@ -89,6 +94,7 @@ class PayrollEmployeeSummary {
       statutoryDeduction: asDouble(json['statutory_deduction_amount']),
       attendanceDeduction: asDouble(json['attendance_deduction_amount']),
       arrears: asDouble(json['arrears_amount']),
+      mrExpense: asDouble(json['mr_expense_amount']),
       netPayable: asDouble(json['net_payable']),
       deductionDays: asDouble(snapshot['attendanceDeductionDays']),
       paidLeaveDays: asInt(snapshot['paidLeaveDays']),
@@ -100,7 +106,12 @@ class PayrollEmployeeSummary {
 }
 
 class PayrollCollection {
-  const PayrollCollection({required this.companyName, required this.cycles});
+  const PayrollCollection({
+    required this.companyName,
+    required this.cycles,
+    required this.mrEnabled,
+  });
   final String companyName;
   final List<PayrollCycleSummary> cycles;
+  final bool mrEnabled;
 }

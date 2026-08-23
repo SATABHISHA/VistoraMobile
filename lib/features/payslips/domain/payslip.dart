@@ -12,6 +12,7 @@ class Payslip {
     required this.statutoryDeduction,
     required this.attendanceDeduction,
     required this.arrearsAmount,
+    required this.mrExpenseAmount,
     required this.netPayable,
     this.employeeEmail,
     this.releasedAt,
@@ -29,6 +30,7 @@ class Payslip {
   final double statutoryDeduction;
   final double attendanceDeduction;
   final double arrearsAmount;
+  final double mrExpenseAmount;
   final double netPayable;
   final DateTime? releasedAt;
   final DateTime? generatedAt;
@@ -55,6 +57,7 @@ class Payslip {
       statutoryDeduction: asDouble(payroll['statutory_deduction_amount']),
       attendanceDeduction: asDouble(payroll['attendance_deduction_amount']),
       arrearsAmount: asDouble(payroll['arrears_amount']),
+      mrExpenseAmount: asDouble(payroll['mr_expense_amount']),
       netPayable: asDouble(payroll['net_payable']),
       releasedAt: asDateTime(cycle['released_at']),
       generatedAt: asDateTime(json['generated_at']),

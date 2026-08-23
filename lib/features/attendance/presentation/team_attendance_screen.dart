@@ -10,7 +10,9 @@ import 'package:vistora_mobile/features/attendance/presentation/attendance_provi
 import 'package:vistora_mobile/features/auth/presentation/auth_controller.dart';
 
 class TeamAttendanceScreen extends ConsumerStatefulWidget {
-  const TeamAttendanceScreen({super.key});
+  const TeamAttendanceScreen({this.initialQuery, super.key});
+
+  final String? initialQuery;
 
   @override
   ConsumerState<TeamAttendanceScreen> createState() =>
@@ -25,6 +27,7 @@ class _TeamAttendanceScreenState extends ConsumerState<TeamAttendanceScreen> {
   @override
   void initState() {
     super.initState();
+    _search.text = widget.initialQuery ?? '';
     _result = _load();
   }
 

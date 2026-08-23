@@ -340,7 +340,7 @@ class DashboardScreen extends ConsumerWidget {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text(
-                                '${modules[index].label} belongs to a later role-specific phase.',
+                                '${modules[index].label} is not available for this account.',
                               ),
                             ),
                           );
@@ -365,21 +365,25 @@ class DashboardScreen extends ConsumerWidget {
           'Platform',
           Icons.space_dashboard_outlined,
           VistoraColors.orange,
+          '/platform',
         ),
         const _Module(
           'Companies',
           Icons.apartment_outlined,
           VistoraColors.cyan,
+          '/platform/companies',
         ),
         const _Module(
           'Payments',
           Icons.receipt_long_outlined,
           VistoraColors.green,
+          '/platform/payments',
         ),
         const _Module(
           'Onboarding',
           Icons.how_to_reg_outlined,
           VistoraColors.pink,
+          '/platform/onboarding',
         ),
         if (session.features.mr)
           const _Module(
@@ -416,6 +420,13 @@ class DashboardScreen extends ConsumerWidget {
           VistoraColors.orange,
           '/payroll-admin',
         ),
+      if (const {'admin', 'hr'}.contains(session.user.normalizedRole))
+        const _Module(
+          'Salary Structures',
+          Icons.account_balance_wallet_outlined,
+          VistoraColors.green,
+          '/salary-structures',
+        ),
       const _Module(
         'Holidays',
         Icons.calendar_month_outlined,
@@ -427,7 +438,7 @@ class DashboardScreen extends ConsumerWidget {
           session.user.isSupervisor ? 'Subordinate Employees' : 'Employees',
           Icons.groups_outlined,
           VistoraColors.pink,
-          '/team-attendance',
+          session.user.isSupervisor ? '/team-attendance' : '/employees',
         ),
       if (session.features.projects)
         const _Module(
@@ -460,6 +471,21 @@ class DashboardScreen extends ConsumerWidget {
           'HR Workspace',
           Icons.admin_panel_settings_outlined,
           VistoraColors.pink,
+          '/hr-operations',
+        ),
+      if (session.features.fileManager && session.user.isCompanyManager)
+        const _Module(
+          'Secure Files',
+          Icons.folder_copy_outlined,
+          VistoraColors.cyan,
+          '/file-manager',
+        ),
+      if (session.user.isCompanyManager)
+        const _Module(
+          'Company Settings',
+          Icons.settings_outlined,
+          VistoraColors.orange,
+          '/company-settings',
         ),
     ];
   }

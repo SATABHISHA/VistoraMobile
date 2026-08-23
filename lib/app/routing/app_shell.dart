@@ -46,10 +46,43 @@ class AppShell extends StatelessWidget {
   }
 
   static List<_ShellDestination> _destinations(AuthState auth) {
+    if (auth.session?.user.normalizedRole == 'superadmin') {
+      return const [
+        _ShellDestination(
+          'Home',
+          Icons.home_outlined,
+          Icons.home,
+          '/dashboard',
+        ),
+        _ShellDestination(
+          'Platform',
+          Icons.space_dashboard_outlined,
+          Icons.space_dashboard,
+          '/platform',
+        ),
+        _ShellDestination(
+          'Companies',
+          Icons.apartment_outlined,
+          Icons.apartment,
+          '/platform/companies',
+        ),
+        _ShellDestination(
+          'Payments',
+          Icons.receipt_long_outlined,
+          Icons.receipt_long,
+          '/platform/payments',
+        ),
+        _ShellDestination(
+          'Onboarding',
+          Icons.how_to_reg_outlined,
+          Icons.how_to_reg,
+          '/platform/onboarding',
+        ),
+      ];
+    }
     final isManager = const {
       'admin',
       'hr',
-      'superadmin',
     }.contains(auth.session?.user.normalizedRole);
     final isSupervisor = auth.session?.user.normalizedRole == 'supervisor';
     final items = <_ShellDestination>[

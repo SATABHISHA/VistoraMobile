@@ -19,6 +19,7 @@ class PayrollRepository {
     final company = asMap(data['company']);
     return PayrollCollection(
       companyName: company['company_name']?.toString() ?? 'Company',
+      mrEnabled: company['mr_enabled'] == true || company['mr_enabled'] == 1,
       cycles: asList(
         page['data'] ?? data['items'],
       ).map((item) => PayrollCycleSummary.fromJson(asMap(item))).toList(),
@@ -39,6 +40,18 @@ class PayrollRepository {
   Future<void> rollbackDeductions(int cycleId, {List<int>? employeeIds}) =>
       _api.post(
         '/payroll/cycles/$cycleId/rollback-deductions',
+        data: {'employee_ids': ?employeeIds},
+      );
+
+  Future<void> calculateMrExpenses(int cycleId, {List<int>? employeeIds}) =>
+      _api.post(
+        '/payroll/cycles/$cycleId/calculate-mr-expenses',
+        data: {'employee_ids': ?employeeIds},
+      );
+
+  Future<void> rollbackMrExpenses(int cycleId, {List<int>? employeeIds}) =>
+      _api.post(
+        '/payroll/cycles/$cycleId/rollback-mr-expenses',
         data: {'employee_ids': ?employeeIds},
       );
 

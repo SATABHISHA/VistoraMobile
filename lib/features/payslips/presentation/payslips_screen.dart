@@ -582,6 +582,8 @@ class _AdminPayslipCard extends StatelessWidget {
             _info('Statutory deductions', _money(item.statutoryDeduction)),
             _info('Attendance deductions', _money(item.attendanceDeduction)),
             _info('Arrears / adjustments', _money(item.arrears)),
+            if (item.mrExpense > 0)
+              _info('Approved field expenses', _money(item.mrExpense)),
             _info('Net payable', _money(item.netPayable)),
             const Divider(height: 28),
             Text(
@@ -740,6 +742,8 @@ class _PayslipSheet extends StatelessWidget {
         _detail('Statutory deductions', _money(item.statutoryDeduction)),
         _detail('Attendance deductions', _money(item.attendanceDeduction)),
         _detail('Arrears / adjustments', _money(item.arrearsAmount)),
+        if (item.mrExpenseAmount > 0)
+          _detail('Approved field expenses', _money(item.mrExpenseAmount)),
         const Divider(height: 30),
         Card(
           color: VistoraColors.green.withValues(alpha: .1),

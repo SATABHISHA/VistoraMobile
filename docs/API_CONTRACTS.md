@@ -329,3 +329,198 @@ All MR data endpoints require Sanctum, tenant context and the tenant MR feature 
 - Filters: `q`, `action`, `date`, `year`, pagination
 - Authorization: Admin/HR receive tenant MR events; Supervisor receives own/subordinate MR events
 - Includes doctor/location/settings/assignment/report create, update, delete, submit, rollback and review events with actor and subject employee context
+
+## MR Field Expenses
+
+All endpoints require Sanctum, tenant context and the enabled MR module. Amount totals are calculated by Laravel; clients must treat returned totals as authoritative.
+
+### GET `/mr/expense-claims`
+
+- Query: `mine`, `reviewable`, `employee_id`, `status`, `duty_type`, `q`, `date`, `month`, `year`, `page`, `per_page`
+- Scope: Employee receives own claims. Supervisor review mode receives direct-subordinate claims only. Admin/HR review mode receives tenant claims except the reviewer's own employee claim.
+- Search: employee name/code, area, travel endpoints and travel mode
+- Success: paginated claim rows, employee snapshot, review/rollback actors, payroll-inclusion state and server-calculated capability flags
+- Flutter: My Expenses and Expense Approvals tabs
+
+### POST `/mr/expense-claims`
+
+### PUT `/mr/expense-claims/{claim}`
+
+- Owner: authenticated user's linked employee only
+- Body: `expense_date`, `duty_type` (`hq`, `ex_hq`, `outstation`), `area_covered`, `travel_from`, `travel_to`, `mode_of_travel`; optional allowance, working allowance, distance, fare, courier, other-doctor expense and remarks fields
+- Auto fields: employee number/name/designation/headquarters/state/business unit are snapshotted from the authenticated employee record
+- Server calculation: `total_allowance = allowance_amount + working_allowance_amount`; `total_expense = total_allowance + fare_amount + courier_charges + other_doctor_expenses`
+- Validation: one daily statement per employee/date; date cannot be future; monetary and distance values must be non-negative
+- Edit state: draft or rejected only
+
+### POST `/mr/expense-claims/{claim}/submit`
+
+### POST `/mr/expense-claims/{claim}/rollback-submission`
+
+- Owner only
+- Submit requires a positive total and changes the claim to `submitted`
+- Rollback requires `rollback_notes` and is permitted only before a manager reviews the claim
+- Every transition is written to the MR audit log
+
+### POST `/mr/expense-claims/{claim}/approve`
+
+### POST `/mr/expense-claims/{claim}/reject`
+
+### POST `/mr/expense-claims/{claim}/revert`
+
+- Roles: Admin, HR, Supervisor and tenant-context Superadmin through manager middleware
+- Authorization: Supervisors can review only direct-subordinate claims and never their own. Admin/HR review Supervisor and employee claims but never their own linked claim.
+- Reject/revert body: required `review_notes`; approve notes are optional
+- Approved claims are immutable to employees
+- An approval included in payroll cannot be reverted until its payroll inclusion is reversed
+
+## MR expense payroll inclusion
+
+### POST `/payroll/cycles/{cycle}/calculate-mr-expenses`
+
+### POST `/payroll/cycles/{cycle}/rollback-mr-expenses`
+
+- Authentication: Sanctum, tenant context and Admin/HR role
+- Body: optional `employee_ids`; omit to process all cycle employees
+- Apply rule: only approved claims belonging to the selected payroll month and employee are included
+- Idempotency: the inclusion ledger prevents duplicate additions; rerunning recalculates the authoritative included total
+- Rollback: marks matching ledger rows reverted and removes only the MR reimbursement amount
+- Lock: released cycles return HTTP 409 until the existing payroll rollback workflow returns them to draft
+- Payroll effect: MR expense is a reimbursement added after salary/arrears and attendance deductions; it is printed separately on tenant-branded payslips
+- Flutter: bulk multi-select and individual Include/Undo actions
+
+## Employee and salary administration
+
+### GET `/employees`
+
+- Roles/scope: Laravel applies `EmployeeAccess::visibleIds`; Admin/HR see tenant employees and Supervisor sees allowed employees
+- Query: `q`, `status`, `page`, `perPage`
+- Success: paginated employees with organisation relations, supervisors, login identity and current salary snapshot
+- Flutter: Employee Directory and supporting employee selectors
+
+### GET `/employees-salary-structures`
+
+- Roles: Admin, HR
+- Query: `year`; optional `q`; `paginated=1`, `page`, `perPage` enable the mobile paginator
+- Backward compatibility: without `paginated=1`, the existing Laravel Salary/Payroll screens receive the original array contract
+- Flutter: searchable salary roster
+
+### GET `/employees/{employee}/salary-structures`
+
+- Roles: Admin, HR
+- Success: employee, annual structures and revision history
+
+### POST `/employees/{employee}/salary-revisions`
+
+- Roles: Admin, HR
+- Body: `year`, `revision_date`, positive `increment_amount`, optional `arrear_effective_date`
+- Server behavior: proportionally revises the persisted structure, calculates arrears and refreshes only mutable payroll cycles
+
+### DELETE `/employees/{employee}/salary-revisions/{revision}`
+
+- Roles: Admin, HR
+- Rules: only the latest applied revision can be rolled back; disbursed arrears cannot be reversed
+- Flutter: year-filtered structure detail and safe rollback confirmation
+
+## Recruitment, letters and final settlement
+
+### GET/POST/PUT `/recruitment`
+
+### POST `/recruitment/{candidate}/pipeline-action`
+
+### POST `/recruitment/candidates/{candidate}/interviews`
+
+- Roles: Admin, HR
+- Candidate list supports server-side status/search pagination
+- Interview body: schedule, panel user IDs, mode and optional notes; Laravel notifications remain authoritative
+- Flutter: recruitment pipeline and interview scheduling
+
+### GET/POST `/recruitment/offer-templates`
+
+### PUT `/recruitment/offer-templates/{template}`
+
+### GET `/recruitment/offers`
+
+### POST `/recruitment/candidates/{candidate}/offer-letter`
+
+### POST `/recruitment/offers/{offer}/status`
+
+- Roles: Admin, HR
+- Offer list filters: `q`, `month`, `year`, `page`, `per_page`
+- Generation body: `template_id`, `position`, `start_date`, `offered_ctc`
+- Server output: persistent tenant-branded rendered HTML with candidate/template relations and generation metadata
+- Flutter: template authoring, generation, preview and sent/accepted/declined/revoked state changes
+
+### GET `/appointment-templates`
+
+### GET `/employee-documents`
+
+### POST `/employees/{employee}/appointment-letters`
+
+- Roles: Admin, HR for generation
+- Body: `template_id` and optional designation, joining date and place overrides
+- Laravel merges employee, salary and tenant branding fields
+- Flutter: generated-letter list, preview and appointment generation
+
+### GET `/final-settlements`
+
+### POST `/employees/{employee}/final-settlement/calculate`
+
+### PUT `/employees/{employee}/final-settlement`
+
+### POST `/final-settlements/{settlement}/status`
+
+### POST `/final-settlements/{settlement}/revoke`
+
+### POST `/final-settlements/disburse`
+
+- Roles: Admin, HR
+- Laravel calculates salary due and validates workflow transitions; Flutter supplies editable bonus/deduction/notes values and confirmed employee dates
+- Disbursement accepts `settlement_ids` for explicit multi-selection
+
+## Secure file manager
+
+### GET `/file-manager`
+
+- Roles: Admin, HR
+- Query: optional `q`; `paginated=1`, `page`, `perPage` enable mobile pagination while the existing web response remains unchanged by default
+- Success: folders and quota totals
+
+### POST `/file-manager/folders`
+
+### GET/DELETE `/file-manager/folders/{folder}`
+
+### POST `/file-manager/folders/{folder}/files`
+
+### GET `/file-manager/files/{file}/download`
+
+### DELETE `/file-manager/files/{file}`
+
+- Upload: multipart; Laravel validates tenant folder ownership and the existing file-size/type/quota rules
+- Download/delete: tenant-scoped file authorization
+- Flutter: create/open folders, upload with native file picker, secure download/open and delete
+
+## Tenant and platform administration
+
+### GET/PUT `/settings/company`
+
+### GET/POST/PUT/DELETE organisation master endpoints
+
+### GET/PUT `/settings/geofence`
+
+### GET/PUT `/settings/smtp`; POST `/settings/smtp/test`
+
+- Roles: Admin, HR according to the existing route middleware
+- Flutter: Company Settings tabs; passwords/secrets are never rendered back or logged
+
+### GET `/superadmin/dashboard`
+
+### GET `/superadmin/companies`
+
+### GET `/superadmin/payments`
+
+### GET `/superadmin/onboarding`
+
+- Role: Superadmin
+- Company/payment/onboarding lists support server pagination and search/status or period filters
+- Flutter: dedicated platform-only shell destinations; tenant attendance/payroll routes are not shown to Superadmin

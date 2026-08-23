@@ -9,15 +9,18 @@ import 'package:vistora_mobile/features/auth/presentation/auth_controller.dart';
 import 'package:vistora_mobile/features/mr/data/mr_repository.dart';
 import 'package:vistora_mobile/features/mr/domain/mr_models.dart';
 import 'package:vistora_mobile/features/mr/presentation/mr_forms.dart';
+import 'package:vistora_mobile/features/mr/presentation/mr_expense_claims_view.dart';
 import 'package:vistora_mobile/features/mr/presentation/mr_providers.dart';
 
 enum _MrSection {
   myVisits,
   myReports,
+  myExpenses,
   doctors,
   locations,
   assignments,
   teamReports,
+  expenseApprovals,
   settings,
   audit,
 }
@@ -26,10 +29,12 @@ extension on _MrSection {
   String get title => switch (this) {
     _MrSection.myVisits => 'My visits',
     _MrSection.myReports => 'My reports',
+    _MrSection.myExpenses => 'My expenses',
     _MrSection.doctors => 'Doctors',
     _MrSection.locations => 'Locations',
     _MrSection.assignments => 'Assignments',
     _MrSection.teamReports => 'Visit reports',
+    _MrSection.expenseApprovals => 'Expense approvals',
     _MrSection.settings => 'Settings',
     _MrSection.audit => 'Audit log',
   };
@@ -37,10 +42,12 @@ extension on _MrSection {
   IconData get icon => switch (this) {
     _MrSection.myVisits => Icons.event_available_outlined,
     _MrSection.myReports => Icons.description_outlined,
+    _MrSection.myExpenses => Icons.receipt_long_outlined,
     _MrSection.doctors => Icons.medical_services_outlined,
     _MrSection.locations => Icons.location_on_outlined,
     _MrSection.assignments => Icons.assignment_outlined,
     _MrSection.teamReports => Icons.fact_check_outlined,
+    _MrSection.expenseApprovals => Icons.price_check_outlined,
     _MrSection.settings => Icons.tune,
     _MrSection.audit => Icons.history,
   };
@@ -63,10 +70,12 @@ class MrScreen extends ConsumerWidget {
     final sections = <_MrSection>[
       if (selfService) _MrSection.myVisits,
       if (selfService) _MrSection.myReports,
+      if (selfService) _MrSection.myExpenses,
       if (manager) _MrSection.doctors,
       if (manager) _MrSection.locations,
       if (manager) _MrSection.assignments,
       if (manager) _MrSection.teamReports,
+      if (manager) _MrSection.expenseApprovals,
       if (manager) _MrSection.settings,
       if (manager) _MrSection.audit,
     ];
@@ -121,6 +130,10 @@ class MrScreen extends ConsumerWidget {
               for (final section in sections)
                 if (section == _MrSection.settings)
                   const _SettingsView()
+                else if (section == _MrSection.myExpenses)
+                  const MrExpenseClaimsView(mine: true)
+                else if (section == _MrSection.expenseApprovals)
+                  const MrExpenseClaimsView(reviewable: true)
                 else
                   _RecordsView(section: section, role: role),
             ],
@@ -191,6 +204,9 @@ class _RecordsViewState extends ConsumerState<_RecordsView> {
           page: _page,
           perPage: _perPage,
         ),
+      ),
+      _MrSection.myExpenses || _MrSection.expenseApprovals => throw StateError(
+        'Expense claims use their own view.',
       ),
       _MrSection.doctors => _objects(
         await _repository.doctors(

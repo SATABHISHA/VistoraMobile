@@ -406,6 +406,150 @@ class MrVisitReport {
   }
 }
 
+class MrExpenseClaim {
+  const MrExpenseClaim({
+    required this.id,
+    required this.employeeId,
+    required this.expenseDate,
+    required this.dutyType,
+    required this.areaCovered,
+    required this.travelFrom,
+    required this.travelTo,
+    required this.allowanceAmount,
+    required this.workingAllowanceAmount,
+    required this.modeOfTravel,
+    required this.distanceKm,
+    required this.fareAmount,
+    required this.courierCharges,
+    required this.otherDoctorExpenses,
+    required this.totalAllowance,
+    required this.totalExpense,
+    required this.status,
+    required this.submissionCount,
+    required this.canEdit,
+    required this.canDelete,
+    required this.canSubmit,
+    required this.canRollback,
+    required this.canReview,
+    required this.canRevertReview,
+    required this.includedInPayroll,
+    this.employeeName,
+    this.employeeCode,
+    this.designation,
+    this.headquarters,
+    this.remarks,
+    this.reviewNotes,
+    this.rollbackNotes,
+    this.reviewerName,
+    this.submittedAt,
+    this.reviewedAt,
+    this.rolledBackAt,
+  });
+
+  final int id;
+  final int employeeId;
+  final DateTime expenseDate;
+  final String dutyType;
+  final String areaCovered;
+  final String travelFrom;
+  final String travelTo;
+  final double allowanceAmount;
+  final double workingAllowanceAmount;
+  final String modeOfTravel;
+  final double distanceKm;
+  final double fareAmount;
+  final double courierCharges;
+  final double otherDoctorExpenses;
+  final double totalAllowance;
+  final double totalExpense;
+  final String status;
+  final int submissionCount;
+  final String? employeeName;
+  final String? employeeCode;
+  final String? designation;
+  final String? headquarters;
+  final String? remarks;
+  final String? reviewNotes;
+  final String? rollbackNotes;
+  final String? reviewerName;
+  final DateTime? submittedAt;
+  final DateTime? reviewedAt;
+  final DateTime? rolledBackAt;
+  final bool canEdit;
+  final bool canDelete;
+  final bool canSubmit;
+  final bool canRollback;
+  final bool canReview;
+  final bool canRevertReview;
+  final bool includedInPayroll;
+
+  String get dutyLabel => switch (dutyType) {
+    'ex_hq' => 'EX HQ',
+    'outstation' => 'OUTSTATION',
+    _ => 'HQ',
+  };
+
+  factory MrExpenseClaim.fromJson(Map<String, dynamic> json) {
+    final employee = asMap(json['employee']);
+    final snapshot = asMap(json['employee_snapshot_json']);
+    final designation = asMap(employee['designation']);
+    final branch = asMap(employee['branch']);
+    final reviewer = asMap(json['reviewer']);
+    final relationName =
+        [employee['first_name'], employee['middle_name'], employee['last_name']]
+            .where((part) => part != null && part.toString().trim().isNotEmpty)
+            .join(' ');
+
+    return MrExpenseClaim(
+      id: asInt(json['id']),
+      employeeId: asInt(json['employee_id'] ?? employee['id']),
+      expenseDate: asDateTime(json['expense_date']) ?? DateTime.now(),
+      dutyType: json['duty_type']?.toString() ?? 'hq',
+      areaCovered: json['area_covered']?.toString() ?? '',
+      travelFrom: json['travel_from']?.toString() ?? '',
+      travelTo: json['travel_to']?.toString() ?? '',
+      allowanceAmount: asDouble(json['allowance_amount']),
+      workingAllowanceAmount: asDouble(json['working_allowance_amount']),
+      modeOfTravel: json['mode_of_travel']?.toString() ?? '',
+      distanceKm: asDouble(json['distance_km']),
+      fareAmount: asDouble(json['fare_amount']),
+      courierCharges: asDouble(json['courier_charges']),
+      otherDoctorExpenses: asDouble(json['other_doctor_expenses']),
+      totalAllowance: asDouble(json['total_allowance']),
+      totalExpense: asDouble(json['total_expense']),
+      status: json['status']?.toString() ?? 'draft',
+      submissionCount: asInt(json['submission_count']),
+      employeeName: asNullableString(
+        snapshot['employee_name'] ??
+            (relationName.isEmpty ? null : relationName),
+      ),
+      employeeCode: asNullableString(
+        snapshot['employee_code'] ?? employee['emp_code'],
+      ),
+      designation: asNullableString(
+        snapshot['designation'] ?? designation['name'],
+      ),
+      headquarters: asNullableString(
+        snapshot['headquarters'] ?? branch['name'],
+      ),
+      remarks: asNullableString(json['remarks']),
+      reviewNotes: asNullableString(json['review_notes']),
+      rollbackNotes: asNullableString(json['rollback_notes']),
+      reviewerName: asNullableString(reviewer['name']),
+      submittedAt: asDateTime(json['submitted_at']),
+      reviewedAt: asDateTime(json['reviewed_at']),
+      rolledBackAt: asDateTime(json['rolled_back_at']),
+      canEdit: json['can_edit'] == true,
+      canDelete: json['can_delete'] == true,
+      canSubmit: json['can_submit'] == true,
+      canRollback: json['can_rollback'] == true,
+      canReview: json['can_review'] == true,
+      canRevertReview: json['can_revert_review'] == true,
+      includedInPayroll: json['included_in_payroll'] == true,
+    );
+  }
+}
+
 class MrAuditEvent {
   const MrAuditEvent({
     required this.id,
