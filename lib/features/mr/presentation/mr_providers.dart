@@ -9,6 +9,9 @@ final mrRepositoryProvider = Provider<MrRepository>(
 final mrMetadataProvider = FutureProvider<MrMetadata>(
   (ref) => ref.watch(mrRepositoryProvider).metadata(),
 );
+final mrSettingsProvider = FutureProvider<MrSettings>(
+  (ref) => ref.watch(mrRepositoryProvider).settings(),
+);
 final mrDoctorsProvider = FutureProvider<List<MrDoctor>>(
   (ref) async =>
       (await ref.watch(mrRepositoryProvider).doctors(perPage: 100)).items,
@@ -24,6 +27,7 @@ final mrTerritoriesProvider = FutureProvider<List<MrTerritory>>(
 
 void invalidateMr(WidgetRef ref) {
   ref.invalidate(mrMetadataProvider);
+  ref.invalidate(mrSettingsProvider);
   ref.invalidate(mrDoctorsProvider);
   ref.invalidate(mrLocationsProvider);
   ref.invalidate(mrTerritoriesProvider);

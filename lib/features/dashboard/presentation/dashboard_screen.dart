@@ -21,15 +21,21 @@ final dashboardPendingLeavesProvider = FutureProvider<int>((ref) async {
   return items.where((item) => item.employeeId != session?.employeeId).length;
 });
 
-final dashboardUpcomingMrProvider = FutureProvider<List<MrAssignment>>((
-  ref,
-) async {
-  final page = await ref
-      .watch(mrRepositoryProvider)
-      .assignments(mine: true, upcoming: true, perPage: 20);
-  final limit = DateTime.now().add(const Duration(days: 3));
-  return page.items.where((item) => !item.visitDate.isAfter(limit)).toList();
-});
+final dashboardUpcomingMrProvider = FutureProvider.autoDispose
+    .family<List<MrAssignment>, int>((ref, employeeId) async {
+      final page = await ref
+          .watch(mrRepositoryProvider)
+          .assignments(
+            mine: true,
+            employeeId: employeeId,
+            upcoming: true,
+            perPage: 20,
+          );
+      final limit = DateTime.now().add(const Duration(days: 3));
+      return page.items
+          .where((item) => !item.visitDate.isAfter(limit))
+          .toList();
+    });
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -53,7 +59,7 @@ class DashboardScreen extends ConsumerWidget {
         : null;
     final upcomingMr =
         session.features.mr && const {'employee', 'supervisor'}.contains(role)
-        ? ref.watch(dashboardUpcomingMrProvider)
+        ? ref.watch(dashboardUpcomingMrProvider(session.employeeId!))
         : null;
     return Scaffold(
       appBar: AppBar(
@@ -76,6 +82,11 @@ class DashboardScreen extends ConsumerWidget {
             onPressed: () {
               ref.invalidate(todayAttendanceProvider);
               ref.invalidate(leaveSummaryProvider);
+              if (session.employeeId != null) {
+                ref.invalidate(
+                  dashboardUpcomingMrProvider(session.employeeId!),
+                );
+              }
             },
             icon: const Icon(Icons.refresh),
           ),
@@ -96,6 +107,9 @@ class DashboardScreen extends ConsumerWidget {
         onRefresh: () async {
           ref.invalidate(todayAttendanceProvider);
           ref.invalidate(leaveSummaryProvider);
+          if (session.employeeId != null) {
+            ref.invalidate(dashboardUpcomingMrProvider(session.employeeId!));
+          }
           if (session.employeeId != null) {
             await Future.wait([
               ref.read(todayAttendanceProvider.future),
@@ -277,7 +291,10 @@ class DashboardScreen extends ConsumerWidget {
                                           trailing: const Icon(
                                             Icons.chevron_right,
                                           ),
-                                          onTap: () => context.go('/mr'),
+                                          onTap: () => _showUpcomingMrVisit(
+                                            context,
+                                            item,
+                                          ),
                                         ),
                                       )
                                       .toList(),
@@ -494,6 +511,169 @@ class DashboardScreen extends ConsumerWidget {
       await ref.read(authControllerProvider.notifier).logout();
     }
   }
+}
+
+Future<void> _showUpcomingMrVisit(
+  BuildContext context,
+  MrAssignment assignment,
+) => showGeneralDialog<void>(
+  context: context,
+  barrierDismissible: true,
+  barrierLabel: 'Close visit details',
+  barrierColor: Colors.black.withValues(alpha: .72),
+  transitionDuration: const Duration(milliseconds: 300),
+  pageBuilder: (context, _, _) => SafeArea(
+    child: Dialog(
+      insetPadding: const EdgeInsets.all(18),
+      clipBehavior: Clip.antiAlias,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 620),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(22),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Color(0x33FF6A00), Color(0x2200D2FF)],
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const CircleAvatar(
+                      backgroundColor: Color(0x2200D2FF),
+                      child: Icon(
+                        Icons.medical_services_outlined,
+                        color: VistoraColors.cyan,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            assignment.doctorName ?? 'Doctor visit',
+                            style: Theme.of(context).textTheme.titleLarge
+                                ?.copyWith(fontWeight: FontWeight.w900),
+                          ),
+                          if ((assignment.doctorSpecialization ?? '')
+                              .isNotEmpty)
+                            Text(
+                              assignment.doctorSpecialization!,
+                              style: const TextStyle(
+                                color: VistoraColors.muted,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Close',
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(22),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _MrDashboardDetail(
+                      icon: Icons.event_outlined,
+                      title: 'Visit schedule',
+                      value: DateFormat.yMMMMEEEEd().format(
+                        assignment.visitDate,
+                      ),
+                    ),
+                    _MrDashboardDetail(
+                      icon: Icons.place_outlined,
+                      title: 'Doctor location',
+                      value:
+                          assignment.locationAddress ??
+                          assignment.location.address,
+                    ),
+                    _MrDashboardDetail(
+                      icon: assignment.geofenceRequired
+                          ? Icons.gps_fixed
+                          : Icons.gps_not_fixed,
+                      title: 'Location validation',
+                      value: assignment.geofenceRequired
+                          ? 'Submit within ${assignment.location.radiusMeters} metres of this location.'
+                          : 'GPS is captured without a radius restriction.',
+                    ),
+                    if ((assignment.instructions ?? '').isNotEmpty)
+                      _MrDashboardDetail(
+                        icon: Icons.notes_outlined,
+                        title: 'Instructions',
+                        value: assignment.instructions!,
+                      ),
+                    const SizedBox(height: 8),
+                    FilledButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        context.go('/mr');
+                      },
+                      icon: const Icon(Icons.arrow_forward),
+                      label: const Text('Open MR workspace'),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  ),
+  transitionBuilder: (_, animation, _, child) => FadeTransition(
+    opacity: animation,
+    child: ScaleTransition(
+      scale: Tween(
+        begin: .88,
+        end: 1.0,
+      ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutBack)),
+      child: child,
+    ),
+  ),
+);
+
+class _MrDashboardDetail extends StatelessWidget {
+  const _MrDashboardDetail({
+    required this.icon,
+    required this.title,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String title;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 16),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: VistoraColors.orange),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
+              const SizedBox(height: 3),
+              Text(value, style: const TextStyle(color: VistoraColors.muted)),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 class _Hero extends StatelessWidget {

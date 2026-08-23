@@ -25,9 +25,9 @@ Status meanings: Not Started, Blocked by API, In Progress, Implemented, Tested, 
 | Payroll/salary | Admin/HR | Calculation, hold, release, arrears and rollback APIs ready | Tested | Full mobile cycle actions plus server-authoritative leave/absence/holiday deductions and per-employee controls |
 | Recruitment | Admin/HR | Partial API | Blocked by API | Phase 4/6
 | File manager | Admin/HR | Ready when enabled | Not Started | Phase 4
-| MR employee visits | Employee | Existing feature-gated API | Tested | Own assignments, GPS/manual reports, resubmission and history use typed API models |
-| MR supervisor workflow | Supervisor | Existing role-scoped API | Tested | Team assignments, master data, report approval/rejection/revert; Laravel scopes subordinates |
-| MR administration | Admin/HR | Existing feature-gated API | Tested | Doctors, locations, territories, assignments, filters and report review implemented |
+| MR employee visits | Employee | Extended feature-gated API | Tested | Own paginated schedule/history, animated details, GPS/geofence or unrestricted capture, draft submission and noted rollback use typed models |
+| MR supervisor workflow | Supervisor | Extended role-scoped API | Tested | Doctor/location CRUD, tenant MR setting, subordinate-only assignment and report review; all lists are searchable/filterable/paginated |
+| MR administration | Admin/HR | Extended feature-gated API | Tested | Doctor-location mapping limit, dependent assignment locations, immutable submitted assignments, report review and audit log implemented |
 | MR tenant feature guard | Tenant users | Existing `/mr/status` and auth feature state | Tested | Navigation and route are hidden/guarded when disabled |
 | Holidays | All/Admin/HR | Added tenant-scoped persistence/API | Tested | Database-backed calendar, upcoming dashboard data, Admin/HR CRUD; Laravel tests and Flutter model tests pass |
 | Superadmin | Superadmin | Mostly ready | Not Started | Phase 6

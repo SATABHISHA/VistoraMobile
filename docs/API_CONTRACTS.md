@@ -236,8 +236,16 @@ All MR data endpoints require Sanctum, tenant context and the tenant MR feature 
 
 ### GET `/mr/metadata`
 
-- Success: role-scoped employees plus tenant states, branches and business units
-- Flutter: location, territory and assignment forms
+- Success: role-scoped employees, tenant states/branches/business units, and `settings.max_locations_per_doctor`
+- Supervisor employee options contain subordinates only; Admin/HR receive tenant employees
+- Flutter: location, doctor-mapping and assignment forms
+
+### GET/PUT `/mr/settings`
+
+- Manager roles: Admin, HR, Supervisor and Superadmin
+- Body: `max_locations_per_doctor` from 1 to 50
+- Rule: the value cannot be lowered below the largest existing doctor mapping
+- Flutter: audited tenant-wide MR settings screen
 
 ### GET/POST `/mr/doctors`
 
@@ -245,16 +253,24 @@ All MR data endpoints require Sanctum, tenant context and the tenant MR feature 
 
 - Manager roles: Admin, HR, Supervisor and Superadmin for writes
 - Filters: `q`, `status`, `date`, `year`, pagination
-- Validation: name, optional specialization/contact details and active/inactive status
-- Flutter: doctor search and CRUD
+- Validation: name, optional specialization/contact details, status, and mapped `location_ids`
+- Rule: at least one location is required by the Flutter workflow and Laravel enforces the tenant mapping limit
+- Flutter: searchable doctor CRUD, existing-location mapping and inline new-location creation
+
+### GET/PUT `/mr/doctors/{doctor}/locations`
+
+- Success: active locations mapped to the doctor
+- PUT body: `location_ids` and/or nested new `locations`
+- Laravel validates tenant ownership and the configured maximum before synchronizing
 
 ### GET/POST `/mr/locations`
 
 ### PUT/DELETE `/mr/locations/{location}`
 
 - Filters: `q`, `status`, `state_id`, `date`, `year`, pagination
-- Validation: address, tenant state, optional coordinates, geofence radius and status
-- Flutter: visit-location and geofence master CRUD
+- Validation: address, tenant state, optional branch/business unit, optional latitude/longitude/radius, and status
+- Geofence exists only when latitude, longitude and radius are all configured
+- Flutter: organisation-aware location and optional GPS boundary CRUD
 
 ### GET/POST `/mr/territories`
 
@@ -262,7 +278,7 @@ All MR data endpoints require Sanctum, tenant context and the tenant MR feature 
 
 - Filters: doctor/state/branch/business-unit IDs, active flag, search and pagination
 - Validation: doctor, state, branch and business unit are checked by Laravel tenant services
-- Flutter: doctor territory mappings
+- Legacy compatibility only. New Flutter assignment flows use doctor-location mappings and do not expose territory restrictions.
 
 ### GET/POST `/mr/assignments`
 
@@ -270,10 +286,11 @@ All MR data endpoints require Sanctum, tenant context and the tenant MR feature 
 
 ### POST `/mr/assignments/{assignment}/cancel`
 
-- Filters: `mine`, `upcoming`, employee/doctor/location/territory fields, status, visit date, year and search
+- Filters: `mine`, `upcoming`, employee/doctor/location fields, status, visit date, year, employee/doctor text search and pagination
 - Authorization: Admin/HR see tenant records; Supervisor/Superadmin are subordinate-scoped; Employee uses own assignments
-- Validation: Laravel verifies territory compatibility and assignment state
-- Flutter: employee visits and manager planning/edit/cancel workflows
+- Validation: Laravel verifies employee scope and that the selected location is mapped to the doctor; employee area does not restrict assignment
+- Immutability: edit/delete/cancel are blocked after a report has ever been submitted, including after employee rollback
+- Flutter: searchable employee/doctor selection, dependent mapped-location dropdown, automatic single-location selection, edit/delete and visit details
 
 ### POST `/mr/assignments/{assignment}/visit-report`
 
@@ -282,9 +299,17 @@ All MR data endpoints require Sanctum, tenant context and the tenant MR feature 
 ### POST `/mr/visit-reports/{report}/submit`
 
 - Authorization: only the assigned employee can create, edit or submit
-- Body: `visited_at`, `check_in_source`, optional notes/outcome; GPS reports include latitude, longitude and device accuracy
-- Server authority: Laravel calculates distance, validates geofence/assignment/tenant and controls status. Manual fallback sends no client distance.
-- Flutter: GPS capture, permission failures, manual fallback and save/submit
+- Body: `visited_at`, `check_in_source`, optional captured address/notes/outcome; GPS reports include latitude, longitude and device accuracy
+- Server authority: Laravel calculates distance, validates geofence/assignment/tenant and controls status
+- When the mapped doctor location has latitude, longitude and radius, GPS is mandatory and submission is rejected outside the radius
+- When no complete geofence exists, captured GPS is stored without a radius restriction and a manual fallback remains available
+- Flutter: GPS capture, permission failures, draft save and submission
+
+### POST `/mr/visit-reports/{report}/rollback-submission`
+
+- Authorization: assigned employee only, while the report is submitted and awaiting review
+- Body: required `rollback_notes`
+- Result: report returns to draft; notes, actor and time are retained; the assignment remains permanently protected from edit/delete because it was previously submitted
 
 ### GET `/mr/visit-reports`
 
@@ -298,3 +323,9 @@ All MR data endpoints require Sanctum, tenant context and the tenant MR feature 
 - Authorization: role and subordinate scope is enforced by Laravel
 - Rejection body: required `review_notes`
 - Flutter: employee report history and manager approval workflow
+
+### GET `/mr/audit-logs`
+
+- Filters: `q`, `action`, `date`, `year`, pagination
+- Authorization: Admin/HR receive tenant MR events; Supervisor receives own/subordinate MR events
+- Includes doctor/location/settings/assignment/report create, update, delete, submit, rollback and review events with actor and subject employee context

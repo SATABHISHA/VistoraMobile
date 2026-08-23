@@ -389,52 +389,155 @@ class _Calendar extends StatelessWidget {
         LayoutBuilder(
           builder: (context, constraints) {
             final columns = constraints.maxWidth >= 720 ? 7 : 2;
-            return GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: value.days.length,
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: columns,
-                mainAxisSpacing: 8,
-                crossAxisSpacing: 8,
-                childAspectRatio: columns == 7 ? .9 : 1.55,
-              ),
-              itemBuilder: (context, index) {
-                final day = value.days[index];
-                return Card(
-                  clipBehavior: Clip.antiAlias,
-                  child: InkWell(
-                    onTap: day.id == null ? null : () => onRegularize(day),
-                    child: Padding(
-                      padding: const EdgeInsets.all(11),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '${day.day}  ${day.weekday}',
-                            style: const TextStyle(fontWeight: FontWeight.w900),
-                          ),
-                          const Spacer(),
-                          StatusBadge(day.status ?? 'upcoming'),
-                          if (day.leaveName != null) ...[
-                            const SizedBox(height: 5),
+            final cardWidth =
+                (constraints.maxWidth - ((columns - 1) * 8)) / columns;
+            return Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: value.days.map((day) {
+                final hasTiming =
+                    day.checkInAt != null ||
+                    day.checkOutAt != null ||
+                    day.workedMinutes > 0;
+                return SizedBox(
+                  width: cardWidth,
+                  child: Card(
+                    clipBehavior: Clip.antiAlias,
+                    child: InkWell(
+                      onTap: day.id == null ? null : () => onRegularize(day),
+                      child: Padding(
+                        padding: const EdgeInsets.all(11),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
                             Text(
-                              day.leaveName!,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 10),
+                              '${day.day}  ${day.weekday}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                              ),
                             ),
+                            const SizedBox(height: 16),
+                            StatusBadge(day.status ?? 'upcoming'),
+                            if (day.leaveName != null) ...[
+                              const SizedBox(height: 5),
+                              Text(
+                                day.leaveName!,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 10),
+                              ),
+                            ],
+                            if (hasTiming) ...[
+                              const SizedBox(height: 8),
+                              TweenAnimationBuilder<double>(
+                                duration: const Duration(milliseconds: 420),
+                                curve: Curves.easeOutCubic,
+                                tween: Tween(begin: 0, end: 1),
+                                builder: (context, value, child) => Opacity(
+                                  opacity: value,
+                                  child: Transform.translate(
+                                    offset: Offset(0, 8 * (1 - value)),
+                                    child: child,
+                                  ),
+                                ),
+                                child: _DayTiming(day: day),
+                              ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
                     ),
                   ),
                 );
-              },
+              }).toList(),
             );
           },
         ),
       ],
     );
   }
+}
+
+class _DayTiming extends StatelessWidget {
+  const _DayTiming({required this.day});
+
+  final AttendanceDay day;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+    decoration: BoxDecoration(
+      color: VistoraColors.cyan.withValues(alpha: .07),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: VistoraColors.cyan.withValues(alpha: .2)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _TimingRow(
+          icon: Icons.login_outlined,
+          label: 'In',
+          value: _time(day.checkInAt),
+        ),
+        const SizedBox(height: 3),
+        _TimingRow(
+          icon: Icons.logout_outlined,
+          label: 'Out',
+          value: _time(day.checkOutAt),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Total ${_duration(day.workedMinutes)}',
+          style: const TextStyle(
+            color: VistoraColors.green,
+            fontSize: 11,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ],
+    ),
+  );
+
+  static String _time(DateTime? value) =>
+      value == null ? '—' : DateFormat.jm().format(value.toLocal());
+
+  static String _duration(int minutes) =>
+      '${minutes ~/ 60}h ${minutes.remainder(60)}m';
+}
+
+class _TimingRow extends StatelessWidget {
+  const _TimingRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Icon(icon, size: 13, color: VistoraColors.cyan),
+      const SizedBox(width: 4),
+      Text(
+        '$label ',
+        style: const TextStyle(
+          color: VistoraColors.muted,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      Expanded(
+        child: Text(
+          value,
+          textAlign: TextAlign.end,
+          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900),
+        ),
+      ),
+    ],
+  );
 }

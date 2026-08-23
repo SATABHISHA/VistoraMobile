@@ -89,7 +89,7 @@ Sanctum tokens are stored with `flutter_secure_storage`. Widgets do not perform 
 
 The Holidays feature uses tenant-scoped Laravel database persistence. Admin/HR users can manage the calendar; all authenticated tenant users can view it. The Laravel Blade settings and employee portal consume the same API, so holiday data is no longer device/browser-specific.
 
-The MR workspace is available only when the tenant MR feature is enabled. It provides employee visits and GPS/manual reports, supervisor team planning and approvals, and role-authorized doctor, location, territory and assignment management.
+The MR workspace is available only when the tenant MR feature is enabled. It provides mapped doctor locations, an audited per-doctor location limit, subordinate-scoped planning, searchable/paginated records, dependent location selection, GPS/geofence visit reporting, employee submission rollback, and role-authorized review. Legacy territories remain a backend compatibility detail and are not required by the mobile assignment flow.
 
 Payslip PDFs are generated from the authenticated payslip API payload, matching the existing Laravel employee portal behavior, and can be previewed, printed or shared using the native platform sheet.
 
