@@ -46,15 +46,20 @@ class MrEmployeeOption extends MrOption {
 }
 
 class MrSettings {
-  const MrSettings({this.maxLocationsPerDoctor = 2});
+  const MrSettings({
+    this.maxLocationsPerDoctor = 2,
+    this.autoConfirmVisitReports = false,
+  });
 
   final int maxLocationsPerDoctor;
+  final bool autoConfirmVisitReports;
 
   factory MrSettings.fromJson(Map<String, dynamic> json) => MrSettings(
     maxLocationsPerDoctor: asInt(
       json['max_locations_per_doctor'],
       2,
     ).clamp(1, 50),
+    autoConfirmVisitReports: json['auto_confirm_visit_reports'] == true,
   );
 }
 
@@ -316,6 +321,7 @@ class MrVisitReport {
     required this.employeeId,
     required this.status,
     required this.submissionCount,
+    required this.autoConfirmed,
     this.visitedAt,
     this.submittedAt,
     this.rolledBackAt,
@@ -342,6 +348,7 @@ class MrVisitReport {
   final int employeeId;
   final String status;
   final int submissionCount;
+  final bool autoConfirmed;
   final DateTime? visitedAt;
   final DateTime? submittedAt;
   final DateTime? rolledBackAt;
@@ -381,6 +388,7 @@ class MrVisitReport {
       employeeId: asInt(json['employee_id'] ?? employee['id']),
       status: json['status']?.toString() ?? 'draft',
       submissionCount: asInt(json['submission_count']),
+      autoConfirmed: json['auto_confirmed'] == true,
       visitedAt: asDateTime(json['visited_at']),
       submittedAt: asDateTime(json['submitted_at']),
       rolledBackAt: asDateTime(json['rolled_back_at']),

@@ -714,6 +714,12 @@ class _RecordsViewState extends ConsumerState<_RecordsView> {
                     '${report.submissionCount} submission${report.submissionCount == 1 ? '' : 's'}',
                 color: VistoraColors.muted,
               ),
+              if (report.autoConfirmed)
+                const _InfoChip(
+                  icon: Icons.bolt_rounded,
+                  text: 'Auto-confirmed',
+                  color: VistoraColors.green,
+                ),
             ],
           ),
           if ((report.reviewNotes ?? '').isNotEmpty) ...[
@@ -816,7 +822,12 @@ class _RecordsViewState extends ConsumerState<_RecordsView> {
 
   Future<void> _openReport(MrAssignment assignment) async {
     if (await showMrReportEditor(context, assignment: assignment) && mounted) {
-      _success('Visit report saved.');
+      final settings = await ref.read(mrSettingsProvider.future);
+      _success(
+        settings.autoConfirmVisitReports
+            ? 'Visit report submitted and auto-confirmed.'
+            : 'Visit report submitted for review.',
+      );
       await _refresh();
     }
   }
@@ -1301,6 +1312,7 @@ class _SettingsViewState extends ConsumerState<_SettingsView> {
   late Future<MrSettings> _future;
   bool _initialized = false;
   bool _saving = false;
+  bool _autoConfirm = false;
 
   @override
   void initState() {
@@ -1324,9 +1336,13 @@ class _SettingsViewState extends ConsumerState<_SettingsView> {
     try {
       final settings = await ref
           .read(mrRepositoryProvider)
-          .updateSettings(value);
+          .updateSettings(
+            maxLocationsPerDoctor: value,
+            autoConfirmVisitReports: _autoConfirm,
+          );
       if (!mounted) return;
       _limit.text = '${settings.maxLocationsPerDoctor}';
+      _autoConfirm = settings.autoConfirmVisitReports;
       ref.invalidate(mrSettingsProvider);
       ref.invalidate(mrMetadataProvider);
       _message('MR settings saved.', success: true);
@@ -1375,6 +1391,7 @@ class _SettingsViewState extends ConsumerState<_SettingsView> {
       }
       if (!_initialized) {
         _limit.text = '${snapshot.requireData.maxLocationsPerDoctor}';
+        _autoConfirm = snapshot.requireData.autoConfirmVisitReports;
         _initialized = true;
       }
       return ListView(
@@ -1444,6 +1461,57 @@ class _SettingsViewState extends ConsumerState<_SettingsView> {
                               labelText: 'Location limit',
                               prefixIcon: Icon(Icons.pin_drop_outlined),
                               suffixText: 'per doctor',
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 260),
+                            curve: Curves.easeOutCubic,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(18),
+                              gradient: LinearGradient(
+                                colors: _autoConfirm
+                                    ? const [
+                                        Color(0x3324E59B),
+                                        Color(0x2218C8FF),
+                                      ]
+                                    : const [
+                                        Color(0x18FFFFFF),
+                                        Color(0x0DFFFFFF),
+                                      ],
+                              ),
+                              border: Border.all(
+                                color: _autoConfirm
+                                    ? VistoraColors.green.withValues(alpha: .5)
+                                    : Colors.white.withValues(alpha: .1),
+                              ),
+                            ),
+                            child: SwitchListTile.adaptive(
+                              value: _autoConfirm,
+                              onChanged: _saving
+                                  ? null
+                                  : (value) =>
+                                        setState(() => _autoConfirm = value),
+                              secondary: AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 220),
+                                child: Icon(
+                                  _autoConfirm
+                                      ? Icons.bolt_rounded
+                                      : Icons.fact_check_outlined,
+                                  key: ValueKey(_autoConfirm),
+                                  color: _autoConfirm
+                                      ? VistoraColors.green
+                                      : VistoraColors.amber,
+                                ),
+                              ),
+                              title: const Text(
+                                'Auto-confirm visit reports',
+                                style: TextStyle(fontWeight: FontWeight.w900),
+                              ),
+                              subtitle: const Text(
+                                'Immediately approves employee and supervisor reports. Authorized HR/Admin and supervisors can still revert a subordinate review.',
+                                style: TextStyle(color: VistoraColors.muted),
+                              ),
                             ),
                           ),
                           const SizedBox(height: 16),

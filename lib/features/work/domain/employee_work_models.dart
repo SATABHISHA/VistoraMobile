@@ -61,61 +61,30 @@ class EmployeeProject {
       );
 }
 
-class PerformanceReviewItem {
-  const PerformanceReviewItem({
-    required this.id,
-    required this.month,
-    required this.year,
-    required this.overallScore,
-    required this.quality,
-    required this.timeliness,
-    required this.teamwork,
-    required this.initiative,
-    required this.communication,
-    this.comment,
-  });
-  final int id;
-  final int month;
-  final int year;
-  final double overallScore;
-  final int quality;
-  final int timeliness;
-  final int teamwork;
-  final int initiative;
-  final int communication;
-  final String? comment;
-
-  factory PerformanceReviewItem.fromJson(Map<String, dynamic> json) =>
-      PerformanceReviewItem(
-        id: asInt(json['id']),
-        month: asInt(json['review_month']),
-        year: asInt(json['review_year']),
-        overallScore: asDouble(json['overall_score']),
-        quality: asInt(json['quality']),
-        timeliness: asInt(json['timeliness']),
-        teamwork: asInt(json['teamwork']),
-        initiative: asInt(json['initiative']),
-        communication: asInt(json['communication']),
-        comment: asNullableString(json['comment']),
-      );
-}
-
 class InterviewTask {
   const InterviewTask({
     required this.id,
     required this.candidateName,
+    required this.candidateEmail,
     required this.position,
     required this.scheduledAt,
     required this.mode,
     required this.status,
     required this.feedback,
+    this.candidatePhone,
+    this.resumeName,
+    this.notes,
   });
   final int id;
   final String candidateName;
+  final String candidateEmail;
+  final String? candidatePhone;
   final String position;
   final DateTime scheduledAt;
   final String mode;
   final String status;
+  final String? resumeName;
+  final String? notes;
   final List<InterviewFeedbackItem> feedback;
 
   InterviewFeedbackItem? feedbackBy(int userId) {
@@ -127,6 +96,7 @@ class InterviewTask {
 
   factory InterviewTask.fromJson(Map<String, dynamic> json) {
     final candidate = asMap(json['candidate']);
+    final resume = asMap(candidate['resume']);
     final name = [
       candidate['first_name'],
       candidate['last_name'],
@@ -134,10 +104,14 @@ class InterviewTask {
     return InterviewTask(
       id: asInt(json['id']),
       candidateName: name.isEmpty ? 'Candidate' : name,
+      candidateEmail: candidate['email']?.toString() ?? '',
+      candidatePhone: asNullableString(candidate['phone']),
       position: candidate['position']?.toString() ?? '',
       scheduledAt: asDateTime(json['scheduled_at']) ?? DateTime.now(),
       mode: json['mode']?.toString() ?? 'scheduled',
       status: json['status']?.toString() ?? 'scheduled',
+      resumeName: asNullableString(resume['original_name']),
+      notes: asNullableString(json['notes']),
       feedback: asList(
         json['feedback'],
       ).map((item) => InterviewFeedbackItem.fromJson(asMap(item))).toList(),

@@ -17,7 +17,6 @@ class EmployeeWorkScreen extends ConsumerWidget {
     final tabs = <_WorkTab>[
       if (session.features.projects)
         const _WorkTab('Projects', Icons.work_outline, _ProjectsTab()),
-      const _WorkTab('Performance', Icons.insights_outlined, _PerformanceTab()),
       const _WorkTab(
         'Interviews',
         Icons.record_voice_over_outlined,
@@ -261,64 +260,6 @@ class _ProjectUpdateSheetState extends ConsumerState<_ProjectUpdateSheet> {
       );
 }
 
-class _PerformanceTab extends ConsumerWidget {
-  const _PerformanceTab();
-
-  @override
-  Widget build(
-    BuildContext context,
-    WidgetRef ref,
-  ) => _AsyncList<PerformanceReviewItem>(
-    value: ref.watch(employeePerformanceProvider),
-    onRefresh: () async {
-      ref.invalidate(employeePerformanceProvider);
-      await ref.read(employeePerformanceProvider.future);
-    },
-    emptyTitle: 'No performance reviews',
-    emptyMessage: 'Published review history will appear here.',
-    itemBuilder: (item) => Card(
-      child: Padding(
-        padding: const EdgeInsets.all(17),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    DateFormat.yMMMM().format(DateTime(item.year, item.month)),
-                    style: const TextStyle(fontWeight: FontWeight.w900),
-                  ),
-                ),
-                CircleAvatar(child: Text(item.overallScore.toStringAsFixed(1))),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 10,
-              runSpacing: 8,
-              children: [
-                _score('Quality', item.quality),
-                _score('Timeliness', item.timeliness),
-                _score('Teamwork', item.teamwork),
-                _score('Initiative', item.initiative),
-                _score('Communication', item.communication),
-              ],
-            ),
-            if (item.comment != null) ...[
-              const Divider(height: 24),
-              Text(item.comment!),
-            ],
-          ],
-        ),
-      ),
-    ),
-  );
-
-  static Widget _score(String label, int score) =>
-      Chip(label: Text('$label $score/10'));
-}
-
 class _InterviewsTab extends ConsumerWidget {
   const _InterviewsTab();
 
@@ -335,44 +276,10 @@ class _InterviewsTab extends ConsumerWidget {
       emptyMessage: 'New panel assignments will appear here.',
       itemBuilder: (item) {
         final mine = item.feedbackBy(userId);
-        return Card(
-          child: Padding(
-            padding: const EdgeInsets.all(17),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        item.candidateName,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 17,
-                        ),
-                      ),
-                    ),
-                    StatusBadge(mine == null ? 'pending' : 'completed'),
-                  ],
-                ),
-                const SizedBox(height: 7),
-                Text(
-                  '${item.position} • ${DateFormat.yMMMd().add_jm().format(item.scheduledAt)} • ${item.mode.replaceAll('_', ' ')}',
-                ),
-                const SizedBox(height: 12),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: FilledButton.tonalIcon(
-                    onPressed: () => _showFeedback(context, ref, item, mine),
-                    icon: const Icon(Icons.rate_review_outlined),
-                    label: Text(
-                      mine == null ? 'Give feedback' : 'Update feedback',
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+        return _InterviewTaskCard(
+          task: item,
+          feedback: mine,
+          onOpen: () => _showFeedback(context, ref, item, mine),
         );
       },
     );
@@ -392,6 +299,178 @@ class _InterviewsTab extends ConsumerWidget {
     );
     if (saved == true) ref.invalidate(interviewTasksProvider);
   }
+}
+
+class _InterviewTaskCard extends StatelessWidget {
+  const _InterviewTaskCard({
+    required this.task,
+    required this.feedback,
+    required this.onOpen,
+  });
+
+  final InterviewTask task;
+  final InterviewFeedbackItem? feedback;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) => TweenAnimationBuilder<double>(
+    duration: const Duration(milliseconds: 320),
+    tween: Tween(begin: 0, end: 1),
+    builder: (context, value, child) => Transform.translate(
+      offset: Offset(0, 14 * (1 - value)),
+      child: Opacity(opacity: value, child: child),
+    ),
+    child: Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onOpen,
+        child: Ink(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0x1511D8FF), Color(0x12FF5A72)],
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(17),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    CircleAvatar(
+                      radius: 25,
+                      backgroundColor: const Color(0x24FF6B00),
+                      child: Text(
+                        _initials(task.candidateName),
+                        style: const TextStyle(
+                          color: Color(0xFFFF7A00),
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            task.candidateName,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 17,
+                            ),
+                          ),
+                          Text(
+                            task.position.isEmpty
+                                ? 'Position not specified'
+                                : task.position,
+                          ),
+                        ],
+                      ),
+                    ),
+                    StatusBadge(
+                      feedback == null ? 'feedback pending' : 'completed',
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(13),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: .12),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Wrap(
+                    spacing: 18,
+                    runSpacing: 9,
+                    children: [
+                      _detail(
+                        Icons.event_outlined,
+                        DateFormat.yMMMd().format(task.scheduledAt),
+                      ),
+                      _detail(
+                        Icons.schedule_outlined,
+                        DateFormat.jm().format(task.scheduledAt),
+                      ),
+                      _detail(Icons.videocam_outlined, _label(task.mode)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 11),
+                if (task.candidateEmail.isNotEmpty)
+                  _detail(Icons.email_outlined, task.candidateEmail),
+                if (task.candidatePhone != null)
+                  _detail(Icons.phone_outlined, task.candidatePhone!),
+                if (task.resumeName != null)
+                  _detail(
+                    Icons.description_outlined,
+                    'Resume: ${task.resumeName}',
+                  ),
+                if (task.notes != null) ...[
+                  const Divider(height: 22),
+                  Text(
+                    task.notes!,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    if (feedback != null) ...[
+                      const Icon(Icons.star_rounded, color: Color(0xFFFFB300)),
+                      Text(
+                        '${feedback!.rating}/5 • ${_label(feedback!.recommendation)}',
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                    ],
+                    const Spacer(),
+                    FilledButton.tonalIcon(
+                      onPressed: onOpen,
+                      icon: const Icon(Icons.rate_review_outlined),
+                      label: Text(
+                        feedback == null ? 'Give feedback' : 'View / update',
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+
+  static Widget _detail(IconData icon, String value) => Padding(
+    padding: const EdgeInsets.only(bottom: 4),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 18, color: const Color(0xFF57D5FF)),
+        const SizedBox(width: 7),
+        Flexible(child: Text(value)),
+      ],
+    ),
+  );
+
+  static String _label(String value) => value
+      .replaceAll('_', ' ')
+      .split(' ')
+      .where((part) => part.isNotEmpty)
+      .map((part) => '${part[0].toUpperCase()}${part.substring(1)}')
+      .join(' ');
+
+  static String _initials(String value) => value
+      .split(RegExp(r'\s+'))
+      .where((part) => part.isNotEmpty)
+      .take(2)
+      .map((part) => part[0].toUpperCase())
+      .join();
 }
 
 class _InterviewFeedbackSheet extends ConsumerStatefulWidget {
@@ -466,6 +545,57 @@ class _InterviewFeedbackSheetState
             style: Theme.of(
               context,
             ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            widget.task.position.isEmpty
+                ? 'Position not specified'
+                : widget.task.position,
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            color: const Color(0x1211D8FF),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _InterviewTaskCard._detail(
+                    Icons.event_available_outlined,
+                    DateFormat.yMMMd().add_jm().format(widget.task.scheduledAt),
+                  ),
+                  _InterviewTaskCard._detail(
+                    Icons.videocam_outlined,
+                    _InterviewTaskCard._label(widget.task.mode),
+                  ),
+                  if (widget.task.candidateEmail.isNotEmpty)
+                    _InterviewTaskCard._detail(
+                      Icons.email_outlined,
+                      widget.task.candidateEmail,
+                    ),
+                  if (widget.task.candidatePhone != null)
+                    _InterviewTaskCard._detail(
+                      Icons.phone_outlined,
+                      widget.task.candidatePhone!,
+                    ),
+                  if (widget.task.resumeName != null)
+                    _InterviewTaskCard._detail(
+                      Icons.description_outlined,
+                      'Resume: ${widget.task.resumeName}',
+                    ),
+                  if (widget.task.notes != null) ...[
+                    const Divider(),
+                    Text(
+                      'Interview notes',
+                      style: Theme.of(context).textTheme.labelLarge,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(widget.task.notes!),
+                  ],
+                ],
+              ),
+            ),
           ),
           const SizedBox(height: 16),
           DropdownButtonFormField<int>(

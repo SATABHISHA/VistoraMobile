@@ -5,11 +5,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:vistora_mobile/app/providers.dart';
 import 'package:vistora_mobile/app/theme/app_theme.dart';
+import 'package:vistora_mobile/features/auth/presentation/auth_controller.dart';
+import 'package:vistora_mobile/features/salary/data/salary_designer_store.dart';
 import 'package:vistora_mobile/features/salary/data/salary_repository.dart';
 import 'package:vistora_mobile/features/salary/domain/salary_models.dart';
 
 final salaryRepositoryProvider = Provider<SalaryRepository>(
   (ref) => SalaryRepository(ref.watch(apiClientProvider)),
+);
+
+final salaryDesignerStoreProvider = Provider<SalaryDesignerStore>(
+  (ref) => SalaryDesignerStore(),
 );
 
 class SalaryManagementScreen extends ConsumerStatefulWidget {
@@ -29,6 +35,8 @@ class _SalaryManagementScreenState
   int _year = DateTime.now().year;
   int _page = 1;
   late Future<SalaryRosterPage> _future;
+  SalaryDesignerState _designer = SalaryDesignerState.defaults;
+  bool _designerLoading = true;
 
   SalaryRepository get repository => ref.read(salaryRepositoryProvider);
 
@@ -37,6 +45,7 @@ class _SalaryManagementScreenState
     super.initState();
     _search = TextEditingController(text: widget.initialQuery);
     _future = _load();
+    _loadDesigner();
   }
 
   @override
@@ -68,9 +77,38 @@ class _SalaryManagementScreenState
         employee: employee,
         year: _year,
         repository: repository,
+        designer: _designer,
         onChanged: _refresh,
       ),
     );
+  }
+
+  Future<void> _loadDesigner() async {
+    final corpId =
+        ref.read(authControllerProvider).session?.user.corpId ?? 'default';
+    final value = await ref.read(salaryDesignerStoreProvider).read(corpId);
+    if (mounted) {
+      setState(() {
+        _designer = value;
+        _designerLoading = false;
+      });
+    }
+  }
+
+  Future<void> _saveDesigner(SalaryDesignerState value) async {
+    final previous = _designer;
+    setState(() => _designer = value);
+    try {
+      final corpId =
+          ref.read(authControllerProvider).session?.user.corpId ?? 'default';
+      await ref.read(salaryDesignerStoreProvider).write(corpId, value);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _designer = previous);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unable to save salary designer: $error')),
+      );
+    }
   }
 
   @override
@@ -78,30 +116,93 @@ class _SalaryManagementScreenState
     final years = [
       for (var offset = -4; offset <= 1; offset++) DateTime.now().year + offset,
     ]..sort((a, b) => b.compareTo(a));
-    return Scaffold(
-      appBar: AppBar(title: const Text('Salary Structures')),
-      body: RefreshIndicator(
+    return DefaultTabController(
+      length: 6,
+      initialIndex: widget.initialQuery == null ? 0 : 3,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Salary Structure'),
+          bottom: const TabBar(
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
+            tabs: [
+              Tab(
+                icon: Icon(Icons.settings_suggest_outlined),
+                text: 'Pay Components',
+              ),
+              Tab(icon: Icon(Icons.inventory_2_outlined), text: 'Pay Groups'),
+              Tab(
+                icon: Icon(Icons.calculate_outlined),
+                text: 'Formula Builder',
+              ),
+              Tab(
+                icon: Icon(Icons.account_balance_wallet_outlined),
+                text: 'Salary Structure',
+              ),
+              Tab(icon: Icon(Icons.trending_up), text: 'Revisions'),
+              Tab(icon: Icon(Icons.add_card_outlined), text: 'Arrears'),
+            ],
+          ),
+        ),
+        body: _designerLoading
+            ? const Center(child: CircularProgressIndicator())
+            : TabBarView(
+                children: [
+                  _ComponentsWorkspace(
+                    designer: _designer,
+                    onChanged: _saveDesigner,
+                  ),
+                  _PayGroupsWorkspace(
+                    designer: _designer,
+                    onChanged: _saveDesigner,
+                  ),
+                  _FormulaWorkspace(
+                    designer: _designer,
+                    onChanged: _saveDesigner,
+                  ),
+                  _buildRoster(years, _SalaryWorkspaceMode.structure),
+                  _buildRoster(years, _SalaryWorkspaceMode.revisions),
+                  _buildRoster(years, _SalaryWorkspaceMode.arrears),
+                ],
+              ),
+      ),
+    );
+  }
+
+  Widget _buildRoster(List<int> years, _SalaryWorkspaceMode mode) =>
+      RefreshIndicator(
         onRefresh: _refresh,
         child: FutureBuilder<SalaryRosterPage>(
           future: _future,
           builder: (context, snapshot) {
             final result = snapshot.data;
             return ListView(
+              key: PageStorageKey(mode.name),
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 32),
               children: [
-                _SalaryHero(total: result?.total, year: _year),
+                _SalaryHero(total: result?.total, year: _year, mode: mode),
                 const SizedBox(height: 14),
                 LayoutBuilder(
                   builder: (context, constraints) {
                     final stacked = constraints.maxWidth < 560;
                     final search = TextField(
-                      controller: _search,
+                      controller: mode == _SalaryWorkspaceMode.structure
+                          ? _search
+                          : null,
                       decoration: const InputDecoration(
                         prefixIcon: Icon(Icons.search),
                         hintText: 'Search employee name, ID or email',
                       ),
-                      onChanged: (_) {
+                      onChanged: (value) {
+                        if (mode != _SalaryWorkspaceMode.structure) {
+                          _search.value = TextEditingValue(
+                            text: value,
+                            selection: TextSelection.collapsed(
+                              offset: value.length,
+                            ),
+                          );
+                        }
                         _debounce?.cancel();
                         _debounce = Timer(
                           const Duration(milliseconds: 300),
@@ -126,18 +227,21 @@ class _SalaryManagementScreenState
                         _refresh(reset: true);
                       },
                     );
-                    if (stacked) {
-                      return Column(
-                        children: [search, const SizedBox(height: 12), year],
-                      );
-                    }
-                    return Row(
-                      children: [
-                        Expanded(flex: 3, child: search),
-                        const SizedBox(width: 12),
-                        Expanded(child: year),
-                      ],
-                    );
+                    return stacked
+                        ? Column(
+                            children: [
+                              search,
+                              const SizedBox(height: 12),
+                              year,
+                            ],
+                          )
+                        : Row(
+                            children: [
+                              Expanded(flex: 3, child: search),
+                              const SizedBox(width: 12),
+                              Expanded(child: year),
+                            ],
+                          );
                   },
                 ),
                 const SizedBox(height: 16),
@@ -179,6 +283,7 @@ class _SalaryManagementScreenState
                       child: _SalaryEmployeeCard(
                         employee: entry.value,
                         year: _year,
+                        mode: mode,
                         open: () => _showEmployee(entry.value),
                       ),
                     ),
@@ -204,22 +309,1110 @@ class _SalaryManagementScreenState
             );
           },
         ),
+      );
+}
+
+enum _SalaryWorkspaceMode { structure, revisions, arrears }
+
+class _ComponentsWorkspace extends StatelessWidget {
+  const _ComponentsWorkspace({required this.designer, required this.onChanged});
+
+  final SalaryDesignerState designer;
+  final Future<void> Function(SalaryDesignerState) onChanged;
+
+  Future<void> _edit(
+    BuildContext context, [
+    SalaryPayComponent? component,
+  ]) async {
+    final value = await showModalBottomSheet<SalaryPayComponent>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => _ComponentEditor(
+        component:
+            component ??
+            SalaryPayComponent(
+              id: designer.nextComponentId(),
+              name: '',
+              code: '',
+              type: 'Earning',
+              taxable: '1',
+              description: '',
+            ),
+        isNew: component == null,
+      ),
+    );
+    if (value == null) return;
+    final duplicate = designer.components.any(
+      (item) =>
+          item.id != value.id &&
+          (item.name.toLowerCase() == value.name.toLowerCase() ||
+              item.code.toLowerCase() == value.code.toLowerCase()),
+    );
+    if (duplicate && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Component name and code must be unique.'),
+        ),
+      );
+      return;
+    }
+    final next = [
+      ...designer.components.where((item) => item.id != value.id),
+      value,
+    ]..sort((a, b) => a.id.compareTo(b.id));
+    await onChanged(designer.copyWith(components: next));
+  }
+
+  Future<void> _delete(
+    BuildContext context,
+    SalaryPayComponent component,
+  ) async {
+    final usedBy = designer.payGroups
+        .where((group) => group.componentIds.contains(component.id))
+        .map((group) => group.name)
+        .toList();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(Icons.delete_outline),
+        title: Text('Delete ${component.name}?'),
+        content: Text(
+          usedBy.isEmpty
+              ? 'The component and its formula will be removed.'
+              : 'It will also be removed from: ${usedBy.join(', ')}.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.tonal(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await onChanged(
+      designer.copyWith(
+        components: designer.components
+            .where((item) => item.id != component.id)
+            .toList(),
+        payGroups: designer.payGroups
+            .map(
+              (group) => group.copyWith(
+                componentIds: group.componentIds
+                    .where((id) => id != component.id)
+                    .toList(),
+              ),
+            )
+            .toList(),
+        formulas: designer.formulas
+            .where(
+              (formula) =>
+                  formula.componentId != component.id &&
+                  formula.referenceComponentId != component.id,
+            )
+            .toList(),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => ListView(
+    padding: const EdgeInsets.fromLTRB(16, 14, 16, 34),
+    children: [
+      const _DesignerHero(
+        icon: Icons.settings_suggest_outlined,
+        title: 'Pay components',
+        subtitle:
+            'Create earnings, deductions, and reimbursements used by salary structures.',
+        colors: [Color(0xFF0F3B32), Color(0xFF17142C)],
+      ),
+      const SizedBox(height: 14),
+      Align(
+        alignment: Alignment.centerLeft,
+        child: FilledButton.icon(
+          onPressed: () => _edit(context),
+          icon: const Icon(Icons.add),
+          label: const Text('Add component'),
+        ),
+      ),
+      const SizedBox(height: 14),
+      if (designer.components.isEmpty)
+        const _DesignerEmpty(
+          icon: Icons.settings_suggest_outlined,
+          title: 'No pay components',
+          subtitle: 'Add a component before creating a pay group.',
+        )
+      else
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth >= 760
+                ? (constraints.maxWidth - 24) / 3
+                : constraints.maxWidth >= 520
+                ? (constraints.maxWidth - 12) / 2
+                : constraints.maxWidth;
+            return Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: designer.components.asMap().entries.map((entry) {
+                final component = entry.value;
+                final color = _componentColor(component.type);
+                return TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0, end: 1),
+                  duration: Duration(milliseconds: 220 + entry.key * 35),
+                  curve: Curves.easeOutCubic,
+                  builder: (context, value, child) => Opacity(
+                    opacity: value,
+                    child: Transform.translate(
+                      offset: Offset(0, 12 * (1 - value)),
+                      child: child,
+                    ),
+                  ),
+                  child: SizedBox(
+                    width: width,
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: .08),
+                        borderRadius: BorderRadius.circular(19),
+                        border: Border.all(color: color.withValues(alpha: .24)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  component.name,
+                                  style: const TextStyle(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                              ),
+                              _DesignerPill(component.type, color),
+                            ],
+                          ),
+                          const SizedBox(height: 5),
+                          Text(
+                            component.code,
+                            style: const TextStyle(
+                              color: VistoraColors.muted,
+                              fontFamily: 'monospace',
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            component.description.isEmpty
+                                ? 'No description'
+                                : component.description,
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              _DesignerPill(
+                                component.taxable == '1'
+                                    ? 'Taxable'
+                                    : component.taxable == 'partial'
+                                    ? 'Part taxable'
+                                    : 'Non-taxable',
+                                component.taxable == '1'
+                                    ? VistoraColors.amber
+                                    : VistoraColors.cyan,
+                              ),
+                              const Spacer(),
+                              IconButton.filledTonal(
+                                tooltip: 'Edit component',
+                                onPressed: () => _edit(context, component),
+                                icon: const Icon(Icons.edit_outlined),
+                              ),
+                              const SizedBox(width: 6),
+                              IconButton.filledTonal(
+                                tooltip: 'Delete component',
+                                onPressed: () => _delete(context, component),
+                                icon: const Icon(Icons.close),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            );
+          },
+        ),
+    ],
+  );
+}
+
+class _PayGroupsWorkspace extends StatelessWidget {
+  const _PayGroupsWorkspace({required this.designer, required this.onChanged});
+
+  final SalaryDesignerState designer;
+  final Future<void> Function(SalaryDesignerState) onChanged;
+
+  Future<void> _edit(BuildContext context, [SalaryPayGroup? group]) async {
+    final value = await showModalBottomSheet<SalaryPayGroup>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => _PayGroupEditor(
+        group:
+            group ??
+            SalaryPayGroup(
+              id: designer.nextPayGroupId(),
+              name: '',
+              componentIds: const [],
+            ),
+        components: designer.components,
+        isNew: group == null,
+      ),
+    );
+    if (value == null) return;
+    if (designer.payGroups.any(
+      (item) =>
+          item.id != value.id &&
+          item.name.toLowerCase() == value.name.toLowerCase(),
+    )) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Pay group name must be unique.')),
+        );
+      }
+      return;
+    }
+    final groups = [
+      ...designer.payGroups.where((item) => item.id != value.id),
+      value,
+    ]..sort((a, b) => a.id.compareTo(b.id));
+    await onChanged(designer.copyWith(payGroups: groups));
+  }
+
+  Future<void> _delete(BuildContext context, SalaryPayGroup group) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Delete ${group.name}?'),
+        content: const Text(
+          'Existing employee salary snapshots remain unchanged. The group will no longer be available for new assignments.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.tonal(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await onChanged(
+        designer.copyWith(
+          payGroups: designer.payGroups
+              .where((item) => item.id != group.id)
+              .toList(),
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => ListView(
+    padding: const EdgeInsets.fromLTRB(16, 14, 16, 34),
+    children: [
+      const _DesignerHero(
+        icon: Icons.inventory_2_outlined,
+        title: 'Pay groups',
+        subtitle:
+            'Bundle components into reusable packages for employee salary assignment.',
+        colors: [Color(0xFF2B1E48), Color(0xFF093047)],
+      ),
+      const SizedBox(height: 14),
+      Align(
+        alignment: Alignment.centerLeft,
+        child: FilledButton.icon(
+          onPressed: designer.components.isEmpty ? null : () => _edit(context),
+          icon: const Icon(Icons.add_box_outlined),
+          label: const Text('Create pay group'),
+        ),
+      ),
+      const SizedBox(height: 14),
+      if (designer.payGroups.isEmpty)
+        const _DesignerEmpty(
+          icon: Icons.inventory_2_outlined,
+          title: 'No pay groups',
+          subtitle: 'Create a reusable group of salary components.',
+        )
+      else
+        ...designer.payGroups.asMap().entries.map((entry) {
+          final group = entry.value;
+          final members = group.componentIds
+              .map(designer.componentById)
+              .whereType<SalaryPayComponent>()
+              .toList();
+          return TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0, end: 1),
+            duration: Duration(milliseconds: 230 + entry.key * 45),
+            builder: (context, value, child) => Opacity(
+              opacity: value,
+              child: Transform.translate(
+                offset: Offset(0, 12 * (1 - value)),
+                child: child,
+              ),
+            ),
+            child: Card(
+              margin: const EdgeInsets.only(bottom: 12),
+              child: Padding(
+                padding: const EdgeInsets.all(17),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const CircleAvatar(
+                          backgroundColor: Color(0x223AA7FF),
+                          child: Icon(
+                            Icons.inventory_2_outlined,
+                            color: VistoraColors.cyan,
+                          ),
+                        ),
+                        const SizedBox(width: 11),
+                        Expanded(
+                          child: Text(
+                            group.name,
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                        _DesignerPill(
+                          '${members.length} components',
+                          VistoraColors.cyan,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 13),
+                    Wrap(
+                      spacing: 7,
+                      runSpacing: 7,
+                      children: members
+                          .map(
+                            (item) => Chip(
+                              avatar: Icon(
+                                item.isDeduction
+                                    ? Icons.remove_circle_outline
+                                    : Icons.add_circle_outline,
+                                size: 16,
+                              ),
+                              label: Text(item.name),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton.icon(
+                          onPressed: () => _edit(context, group),
+                          icon: const Icon(Icons.edit_outlined),
+                          label: const Text('Edit'),
+                        ),
+                        TextButton.icon(
+                          onPressed: () => _delete(context, group),
+                          icon: const Icon(Icons.delete_outline),
+                          label: const Text('Delete'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }),
+    ],
+  );
+}
+
+class _FormulaWorkspace extends StatelessWidget {
+  const _FormulaWorkspace({required this.designer, required this.onChanged});
+
+  final SalaryDesignerState designer;
+  final Future<void> Function(SalaryDesignerState) onChanged;
+
+  Future<void> _edit(BuildContext context, [SalaryFormula? formula]) async {
+    final value = await showModalBottomSheet<SalaryFormula>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => _FormulaEditor(
+        formula:
+            formula ??
+            SalaryFormula(
+              id: designer.nextFormulaId(),
+              componentId: designer.components.isEmpty
+                  ? 0
+                  : designer.components.first.id,
+              type: 'fixed',
+              value: 0,
+            ),
+        designer: designer,
+        isNew: formula == null,
+      ),
+    );
+    if (value == null) return;
+    if (_wouldCreateFormulaCycle(designer, value)) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('This formula would create a circular reference.'),
+          ),
+        );
+      }
+      return;
+    }
+    final formulas = [
+      ...designer.formulas.where(
+        (item) => item.id != value.id && item.componentId != value.componentId,
+      ),
+      value,
+    ]..sort((a, b) => a.id.compareTo(b.id));
+    await onChanged(designer.copyWith(formulas: formulas));
+  }
+
+  @override
+  Widget build(BuildContext context) => ListView(
+    padding: const EdgeInsets.fromLTRB(16, 14, 16, 34),
+    children: [
+      const _DesignerHero(
+        icon: Icons.calculate_outlined,
+        title: 'Formula builder',
+        subtitle:
+            'Define fixed, CTC-based, component-based, or manually entered salary rules.',
+        colors: [Color(0xFF3A2416), Color(0xFF151A3A)],
+      ),
+      const SizedBox(height: 14),
+      Align(
+        alignment: Alignment.centerLeft,
+        child: FilledButton.icon(
+          onPressed: designer.components.isEmpty ? null : () => _edit(context),
+          icon: const Icon(Icons.add),
+          label: const Text('Add formula'),
+        ),
+      ),
+      const SizedBox(height: 14),
+      if (designer.formulas.isEmpty)
+        const _DesignerEmpty(
+          icon: Icons.calculate_outlined,
+          title: 'No formulas defined',
+          subtitle: 'Add a calculation rule for a salary component.',
+        )
+      else
+        ...designer.formulas.asMap().entries.map((entry) {
+          final formula = entry.value;
+          final component = designer.componentById(formula.componentId);
+          final reference = designer.componentById(
+            formula.referenceComponentId ?? 0,
+          );
+          final color = _componentColor(component?.type ?? 'Earning');
+          return Card(
+            margin: const EdgeInsets.only(bottom: 11),
+            child: ListTile(
+              contentPadding: const EdgeInsets.all(15),
+              leading: CircleAvatar(
+                backgroundColor: color.withValues(alpha: .12),
+                child: Icon(Icons.functions, color: color),
+              ),
+              title: Text(
+                component?.name ?? 'Unknown component',
+                style: const TextStyle(fontWeight: FontWeight.w900),
+              ),
+              subtitle: Padding(
+                padding: const EdgeInsets.only(top: 7),
+                child: Text(_formulaDescription(formula, reference)),
+              ),
+              trailing: Wrap(
+                spacing: 3,
+                children: [
+                  IconButton(
+                    tooltip: 'Edit formula',
+                    onPressed: () => _edit(context, formula),
+                    icon: const Icon(Icons.edit_outlined),
+                  ),
+                  IconButton(
+                    tooltip: 'Remove formula',
+                    onPressed: () => onChanged(
+                      designer.copyWith(
+                        formulas: designer.formulas
+                            .where((item) => item.id != formula.id)
+                            .toList(),
+                      ),
+                    ),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+    ],
+  );
+}
+
+class _ComponentEditor extends StatefulWidget {
+  const _ComponentEditor({required this.component, required this.isNew});
+  final SalaryPayComponent component;
+  final bool isNew;
+
+  @override
+  State<_ComponentEditor> createState() => _ComponentEditorState();
+}
+
+class _ComponentEditorState extends State<_ComponentEditor> {
+  final _key = GlobalKey<FormState>();
+  late final TextEditingController _name;
+  late final TextEditingController _code;
+  late final TextEditingController _description;
+  late String _type;
+  late String _taxable;
+
+  @override
+  void initState() {
+    super.initState();
+    _name = TextEditingController(text: widget.component.name);
+    _code = TextEditingController(text: widget.component.code);
+    _description = TextEditingController(text: widget.component.description);
+    _type = widget.component.type;
+    _taxable = widget.component.taxable;
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _code.dispose();
+    _description.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => SingleChildScrollView(
+    padding: EdgeInsets.fromLTRB(
+      20,
+      18,
+      20,
+      MediaQuery.viewInsetsOf(context).bottom + 24,
+    ),
+    child: Form(
+      key: _key,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            widget.isNew ? 'Add pay component' : 'Edit pay component',
+            style: Theme.of(
+              context,
+            ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 18),
+          TextFormField(
+            controller: _name,
+            decoration: const InputDecoration(labelText: 'Component name'),
+            validator: _required,
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _code,
+            textCapitalization: TextCapitalization.characters,
+            decoration: const InputDecoration(labelText: 'Code'),
+            validator: _required,
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            initialValue: _type,
+            decoration: const InputDecoration(labelText: 'Type'),
+            items: const ['Earning', 'Deduction', 'Reimbursement']
+                .map(
+                  (value) => DropdownMenuItem(value: value, child: Text(value)),
+                )
+                .toList(),
+            onChanged: (value) => setState(() => _type = value ?? _type),
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            initialValue: _taxable,
+            decoration: const InputDecoration(labelText: 'Tax treatment'),
+            items: const [
+              DropdownMenuItem(value: '1', child: Text('Taxable')),
+              DropdownMenuItem(value: 'partial', child: Text('Part taxable')),
+              DropdownMenuItem(value: '0', child: Text('Non-taxable')),
+            ],
+            onChanged: (value) => setState(() => _taxable = value ?? _taxable),
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _description,
+            maxLines: 3,
+            decoration: const InputDecoration(labelText: 'Description'),
+          ),
+          const SizedBox(height: 18),
+          FilledButton.icon(
+            onPressed: () {
+              if (!_key.currentState!.validate()) return;
+              Navigator.pop(
+                context,
+                widget.component.copyWith(
+                  name: _name.text.trim(),
+                  code: _code.text.trim().toUpperCase(),
+                  type: _type,
+                  taxable: _taxable,
+                  description: _description.text.trim(),
+                ),
+              );
+            },
+            icon: const Icon(Icons.save_outlined),
+            label: const Text('Save component'),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _PayGroupEditor extends StatefulWidget {
+  const _PayGroupEditor({
+    required this.group,
+    required this.components,
+    required this.isNew,
+  });
+  final SalaryPayGroup group;
+  final List<SalaryPayComponent> components;
+  final bool isNew;
+
+  @override
+  State<_PayGroupEditor> createState() => _PayGroupEditorState();
+}
+
+class _PayGroupEditorState extends State<_PayGroupEditor> {
+  late final TextEditingController _name;
+  late Set<int> _selected;
+
+  @override
+  void initState() {
+    super.initState();
+    _name = TextEditingController(text: widget.group.name)
+      ..addListener(_refresh);
+    _selected = widget.group.componentIds.toSet();
+  }
+
+  @override
+  void dispose() {
+    _name.removeListener(_refresh);
+    _name.dispose();
+    super.dispose();
+  }
+
+  void _refresh() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) => DraggableScrollableSheet(
+    expand: false,
+    initialChildSize: .82,
+    minChildSize: .55,
+    maxChildSize: .96,
+    builder: (context, controller) => ListView(
+      controller: controller,
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
+      children: [
+        Text(
+          widget.isNew ? 'Create pay group' : 'Edit pay group',
+          style: Theme.of(
+            context,
+          ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900),
+        ),
+        const SizedBox(height: 17),
+        TextField(
+          controller: _name,
+          decoration: const InputDecoration(labelText: 'Pay group name'),
+        ),
+        const SizedBox(height: 18),
+        const Text(
+          'Included components',
+          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
+        ),
+        const SizedBox(height: 8),
+        ...widget.components.map(
+          (component) => CheckboxListTile(
+            value: _selected.contains(component.id),
+            secondary: Icon(
+              component.isDeduction
+                  ? Icons.remove_circle_outline
+                  : Icons.add_circle_outline,
+              color: _componentColor(component.type),
+            ),
+            title: Text(component.name),
+            subtitle: Text('${component.code} · ${component.type}'),
+            onChanged: (value) => setState(
+              () => value == true
+                  ? _selected.add(component.id)
+                  : _selected.remove(component.id),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        FilledButton.icon(
+          onPressed: _name.text.trim().isEmpty || _selected.isEmpty
+              ? null
+              : () => Navigator.pop(
+                  context,
+                  widget.group.copyWith(
+                    name: _name.text.trim(),
+                    componentIds: _selected.toList()..sort(),
+                  ),
+                ),
+          icon: const Icon(Icons.save_outlined),
+          label: const Text('Save pay group'),
+        ),
+      ],
+    ),
+  );
+}
+
+class _FormulaEditor extends StatefulWidget {
+  const _FormulaEditor({
+    required this.formula,
+    required this.designer,
+    required this.isNew,
+  });
+  final SalaryFormula formula;
+  final SalaryDesignerState designer;
+  final bool isNew;
+
+  @override
+  State<_FormulaEditor> createState() => _FormulaEditorState();
+}
+
+class _FormulaEditorState extends State<_FormulaEditor> {
+  late int _componentId;
+  late String _type;
+  late int? _referenceId;
+  late final TextEditingController _value;
+
+  @override
+  void initState() {
+    super.initState();
+    _componentId = widget.formula.componentId;
+    _type = widget.formula.type;
+    _referenceId = widget.formula.referenceComponentId;
+    _value = TextEditingController(
+      text: widget.formula.value == 0
+          ? ''
+          : widget.formula.value.toStringAsFixed(
+              widget.formula.value % 1 == 0 ? 0 : 2,
+            ),
+    )..addListener(_refresh);
+  }
+
+  @override
+  void dispose() {
+    _value.removeListener(_refresh);
+    _value.dispose();
+    super.dispose();
+  }
+
+  void _refresh() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final references = widget.designer.components
+        .where((item) => item.id != _componentId)
+        .toList();
+    return SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        18,
+        20,
+        MediaQuery.viewInsetsOf(context).bottom + 24,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            widget.isNew ? 'Formula builder' : 'Edit formula',
+            style: Theme.of(
+              context,
+            ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 18),
+          DropdownButtonFormField<int>(
+            initialValue: _componentId,
+            decoration: const InputDecoration(labelText: 'Component'),
+            items: widget.designer.components
+                .map(
+                  (item) =>
+                      DropdownMenuItem(value: item.id, child: Text(item.name)),
+                )
+                .toList(),
+            onChanged: (value) => setState(() {
+              _componentId = value ?? _componentId;
+              if (_referenceId == _componentId) _referenceId = null;
+            }),
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            initialValue: _type,
+            decoration: const InputDecoration(labelText: 'Calculation type'),
+            items: const [
+              DropdownMenuItem(value: 'fixed', child: Text('Fixed amount')),
+              DropdownMenuItem(
+                value: 'percent_ctc',
+                child: Text('% of annual CTC'),
+              ),
+              DropdownMenuItem(
+                value: 'percent_comp',
+                child: Text('% of another component'),
+              ),
+              DropdownMenuItem(value: 'manual', child: Text('Variable/manual')),
+            ],
+            onChanged: (value) => setState(() {
+              _type = value ?? _type;
+              if (_type != 'percent_comp') _referenceId = null;
+            }),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _value,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(
+              labelText: _type.startsWith('percent')
+                  ? 'Percentage'
+                  : 'Monthly amount',
+              prefixText: _type.startsWith('percent') ? null : '₹ ',
+              suffixText: _type.startsWith('percent') ? '%' : null,
+            ),
+          ),
+          if (_type == 'percent_comp') ...[
+            const SizedBox(height: 12),
+            DropdownButtonFormField<int>(
+              initialValue: references.any((item) => item.id == _referenceId)
+                  ? _referenceId
+                  : null,
+              decoration: const InputDecoration(
+                labelText: 'Reference component',
+              ),
+              items: references
+                  .map(
+                    (item) => DropdownMenuItem(
+                      value: item.id,
+                      child: Text(item.name),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) => setState(() => _referenceId = value),
+            ),
+          ],
+          const SizedBox(height: 18),
+          FilledButton.icon(
+            onPressed:
+                double.tryParse(_value.text.trim()) == null ||
+                    (_type == 'percent_comp' && _referenceId == null)
+                ? null
+                : () => Navigator.pop(
+                    context,
+                    widget.formula.copyWith(
+                      componentId: _componentId,
+                      type: _type,
+                      value: double.parse(_value.text.trim()),
+                      referenceComponentId: _referenceId,
+                      clearReference: _type != 'percent_comp',
+                    ),
+                  ),
+            icon: const Icon(Icons.save_outlined),
+            label: const Text('Save formula'),
+          ),
+        ],
       ),
     );
   }
 }
+
+class _DesignerHero extends StatelessWidget {
+  const _DesignerHero({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.colors,
+  });
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final List<Color> colors;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(20),
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(23),
+      gradient: LinearGradient(colors: colors),
+      border: Border.all(color: VistoraColors.cyan.withValues(alpha: .18)),
+    ),
+    child: Row(
+      children: [
+        CircleAvatar(
+          radius: 28,
+          backgroundColor: Colors.white.withValues(alpha: .08),
+          child: Icon(icon, color: VistoraColors.orange),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 21,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(subtitle),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _DesignerEmpty extends StatelessWidget {
+  const _DesignerEmpty({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+  });
+  final IconData icon;
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(28),
+      child: Column(
+        children: [
+          Icon(icon, size: 42, color: VistoraColors.muted),
+          const SizedBox(height: 10),
+          Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
+          const SizedBox(height: 5),
+          Text(subtitle, textAlign: TextAlign.center),
+        ],
+      ),
+    ),
+  );
+}
+
+class _DesignerPill extends StatelessWidget {
+  const _DesignerPill(this.label, this.color);
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: .12),
+      borderRadius: BorderRadius.circular(24),
+      border: Border.all(color: color.withValues(alpha: .28)),
+    ),
+    child: Text(
+      label,
+      style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w900),
+    ),
+  );
+}
+
+Color _componentColor(String type) => switch (type.toLowerCase()) {
+  'deduction' => VistoraColors.pink,
+  'reimbursement' => VistoraColors.amber,
+  _ => VistoraColors.green,
+};
+
+String _formulaDescription(
+  SalaryFormula formula,
+  SalaryPayComponent? reference,
+) => switch (formula.type) {
+  'percent_ctc' => '${_compactNumber(formula.value)}% of monthly CTC',
+  'percent_comp' =>
+    '${_compactNumber(formula.value)}% of ${reference?.name ?? 'another component'}',
+  'manual' => 'Variable/manual monthly value · ${_money(formula.value)}',
+  _ => 'Fixed monthly amount · ${_money(formula.value)}',
+};
+
+String _compactNumber(double value) => value % 1 == 0
+    ? value.toStringAsFixed(0)
+    : value.toStringAsFixed(2).replaceFirst(RegExp(r'0+$'), '');
+
+bool _wouldCreateFormulaCycle(
+  SalaryDesignerState designer,
+  SalaryFormula candidate,
+) {
+  if (candidate.type != 'percent_comp' ||
+      candidate.referenceComponentId == null) {
+    return false;
+  }
+  final graph = <int, int>{};
+  for (final formula in designer.formulas) {
+    if (formula.componentId != candidate.componentId &&
+        formula.type == 'percent_comp' &&
+        formula.referenceComponentId != null) {
+      graph[formula.componentId] = formula.referenceComponentId!;
+    }
+  }
+  graph[candidate.componentId] = candidate.referenceComponentId!;
+  final seen = <int>{};
+  var current = candidate.componentId;
+  while (graph[current] != null) {
+    if (!seen.add(current)) return true;
+    current = graph[current]!;
+  }
+  return false;
+}
+
+String? _required(String? value) =>
+    value == null || value.trim().isEmpty ? 'This field is required.' : null;
 
 class _SalaryDetailSheet extends StatefulWidget {
   const _SalaryDetailSheet({
     required this.employee,
     required this.year,
     required this.repository,
+    required this.designer,
     required this.onChanged,
   });
 
   final SalaryRosterEmployee employee;
   final int year;
   final SalaryRepository repository;
+  final SalaryDesignerState designer;
   final Future<void> Function() onChanged;
 
   @override
@@ -263,6 +1456,43 @@ class _SalaryDetailSheetState extends State<_SalaryDetailSheet> {
       await _reload();
       if (mounted) {
         _message('Salary revision applied and draft payroll refreshed.');
+      }
+    } catch (error) {
+      if (mounted) _message(error.toString(), error: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _assign(SalaryStructureRecord? current) async {
+    final input = await showModalBottomSheet<_SalaryStructureInput>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => _SalaryStructureEditor(
+        year: widget.year,
+        designer: widget.designer,
+        current: current,
+      ),
+    );
+    if (input == null || _busy) return;
+    setState(() => _busy = true);
+    try {
+      await widget.repository.upsertStructure(
+        employeeId: widget.employee.employeeId,
+        year: widget.year,
+        payGroupName: input.group.name,
+        payGroupSnapshot: widget.designer.snapshotFor(input.group),
+        annualCtc: input.annualCtc,
+        breakup: input.breakup,
+      );
+      await _reload();
+      if (mounted) {
+        _message(
+          current == null
+              ? 'Salary structure assigned successfully.'
+              : 'Salary structure updated successfully.',
+        );
       }
     } catch (error) {
       if (mounted) _message(error.toString(), error: true);
@@ -413,8 +1643,16 @@ class _SalaryDetailSheetState extends State<_SalaryDetailSheet> {
                       ),
                       const SizedBox(height: 6),
                       const Text(
-                        'Create the component-based structure in the Salary Designer. Mobile intentionally does not invent pay-component formulas.',
+                        'Choose a pay group, preview its component formulas, and assign this employee’s annual CTC.',
                         textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 16),
+                      FilledButton.icon(
+                        onPressed: _busy || widget.designer.payGroups.isEmpty
+                            ? null
+                            : () => _assign(null),
+                        icon: const Icon(Icons.add_card_outlined),
+                        label: const Text('Assign salary structure'),
                       ),
                     ],
                   ),
@@ -422,11 +1660,24 @@ class _SalaryDetailSheetState extends State<_SalaryDetailSheet> {
               )
             else ...[
               _StructureCard(structure: structure),
-              const SizedBox(height: 14),
-              FilledButton.icon(
-                onPressed: _busy ? null : _revise,
-                icon: const Icon(Icons.trending_up),
-                label: const Text('Apply salary revision'),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 9,
+                runSpacing: 9,
+                children: [
+                  FilledButton.tonalIcon(
+                    onPressed: _busy || widget.designer.payGroups.isEmpty
+                        ? null
+                        : () => _assign(structure),
+                    icon: const Icon(Icons.edit_outlined),
+                    label: const Text('Edit structure'),
+                  ),
+                  FilledButton.icon(
+                    onPressed: _busy ? null : _revise,
+                    icon: const Icon(Icons.trending_up),
+                    label: const Text('Apply salary revision'),
+                  ),
+                ],
               ),
               const SizedBox(height: 24),
               Text(
@@ -460,6 +1711,248 @@ class _SalaryDetailSheetState extends State<_SalaryDetailSheet> {
       },
     ),
   );
+}
+
+class _SalaryStructureInput {
+  const _SalaryStructureInput({
+    required this.group,
+    required this.annualCtc,
+    required this.breakup,
+  });
+
+  final SalaryPayGroup group;
+  final double annualCtc;
+  final SalaryBreakup breakup;
+}
+
+class _SalaryStructureEditor extends StatefulWidget {
+  const _SalaryStructureEditor({
+    required this.year,
+    required this.designer,
+    this.current,
+  });
+
+  final int year;
+  final SalaryDesignerState designer;
+  final SalaryStructureRecord? current;
+
+  @override
+  State<_SalaryStructureEditor> createState() => _SalaryStructureEditorState();
+}
+
+class _SalaryStructureEditorState extends State<_SalaryStructureEditor> {
+  late final TextEditingController _ctc;
+  late int _groupId;
+
+  @override
+  void initState() {
+    super.initState();
+    SalaryPayGroup? selected;
+    for (final group in widget.designer.payGroups) {
+      if (group.name.toLowerCase() ==
+          widget.current?.payGroupName.toLowerCase()) {
+        selected = group;
+        break;
+      }
+    }
+    selected ??= widget.designer.payGroups.first;
+    _groupId = selected.id;
+    _ctc = TextEditingController(
+      text: widget.current == null
+          ? ''
+          : widget.current!.ctcAnnual.toStringAsFixed(0),
+    )..addListener(_refresh);
+  }
+
+  void _refresh() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _ctc.removeListener(_refresh);
+    _ctc.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final group = widget.designer.payGroups.firstWhere(
+      (item) => item.id == _groupId,
+    );
+    final annualCtc = double.tryParse(_ctc.text.trim()) ?? 0;
+    final breakup = widget.designer.calculate(group, annualCtc);
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: .94,
+      minChildSize: .65,
+      maxChildSize: .98,
+      builder: (context, controller) => ListView(
+        controller: controller,
+        padding: EdgeInsets.fromLTRB(
+          20,
+          18,
+          20,
+          MediaQuery.viewInsetsOf(context).bottom + 30,
+        ),
+        children: [
+          Row(
+            children: [
+              const CircleAvatar(
+                backgroundColor: Color(0x22FF6B00),
+                child: Icon(
+                  Icons.account_balance_wallet_outlined,
+                  color: VistoraColors.orange,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.current == null
+                          ? 'Assign salary structure'
+                          : 'Edit salary structure',
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    Text('${widget.year} · API-backed employee salary'),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          DropdownButtonFormField<int>(
+            initialValue: _groupId,
+            decoration: const InputDecoration(labelText: 'Pay group'),
+            items: widget.designer.payGroups
+                .map(
+                  (item) =>
+                      DropdownMenuItem(value: item.id, child: Text(item.name)),
+                )
+                .toList(),
+            onChanged: (value) => setState(() => _groupId = value ?? _groupId),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _ctc,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(
+              labelText: 'Annual CTC',
+              prefixText: '₹ ',
+            ),
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _MoneyChip(
+                'Gross / month',
+                breakup.grossMonthly,
+                VistoraColors.cyan,
+              ),
+              _MoneyChip(
+                'Deductions',
+                breakup.deductionMonthly,
+                VistoraColors.pink,
+              ),
+              _MoneyChip(
+                'Net / month',
+                breakup.netMonthly,
+                VistoraColors.green,
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Text(
+            'Salary breakup preview',
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 9),
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(17),
+              border: Border.all(
+                color: VistoraColors.cyan.withValues(alpha: .19),
+              ),
+            ),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                columns: const [
+                  DataColumn(label: Text('COMPONENT')),
+                  DataColumn(label: Text('TYPE')),
+                  DataColumn(label: Text('MONTHLY')),
+                  DataColumn(label: Text('ANNUAL')),
+                ],
+                rows: breakup.lines
+                    .map(
+                      (line) => DataRow(
+                        cells: [
+                          DataCell(
+                            Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  line.component.name,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                Text(
+                                  line.component.code,
+                                  style: const TextStyle(
+                                    color: VistoraColors.muted,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          DataCell(
+                            _DesignerPill(
+                              line.component.type,
+                              _componentColor(line.component.type),
+                            ),
+                          ),
+                          DataCell(Text(_money(line.monthly))),
+                          DataCell(Text(_money(line.annual))),
+                        ],
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+          FilledButton.icon(
+            onPressed: annualCtc <= 0 || breakup.lines.isEmpty
+                ? null
+                : () => Navigator.pop(
+                    context,
+                    _SalaryStructureInput(
+                      group: group,
+                      annualCtc: annualCtc,
+                      breakup: breakup,
+                    ),
+                  ),
+            icon: const Icon(Icons.save_outlined),
+            label: Text(
+              widget.current == null ? 'Assign structure' : 'Update structure',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _RevisionEditor extends StatefulWidget {
@@ -600,9 +2093,14 @@ class _RevisionInput {
 }
 
 class _SalaryHero extends StatelessWidget {
-  const _SalaryHero({required this.total, required this.year});
+  const _SalaryHero({
+    required this.total,
+    required this.year,
+    required this.mode,
+  });
   final int? total;
   final int year;
+  final _SalaryWorkspaceMode mode;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -616,26 +2114,40 @@ class _SalaryHero extends StatelessWidget {
     ),
     child: Row(
       children: [
-        const CircleAvatar(
+        CircleAvatar(
           radius: 28,
-          backgroundColor: Color(0x33FF6B00),
-          child: Icon(
-            Icons.account_balance_wallet_outlined,
-            color: VistoraColors.orange,
-          ),
+          backgroundColor: const Color(0x33FF6B00),
+          child: Icon(switch (mode) {
+            _SalaryWorkspaceMode.structure =>
+              Icons.account_balance_wallet_outlined,
+            _SalaryWorkspaceMode.revisions => Icons.trending_up,
+            _SalaryWorkspaceMode.arrears => Icons.add_card_outlined,
+          }, color: VistoraColors.orange),
         ),
         const SizedBox(width: 15),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Salary control centre',
-                style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900),
-              ),
               Text(
-                '${total ?? '—'} active employees · $year structures and revisions',
+                switch (mode) {
+                  _SalaryWorkspaceMode.structure => 'Salary structure',
+                  _SalaryWorkspaceMode.revisions => 'Salary revisions',
+                  _SalaryWorkspaceMode.arrears => 'Arrears control',
+                },
+                style: const TextStyle(
+                  fontSize: 21,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
+              Text(switch (mode) {
+                _SalaryWorkspaceMode.structure =>
+                  '${total ?? '—'} active employees · $year structures',
+                _SalaryWorkspaceMode.revisions =>
+                  'Select an employee to apply or rollback $year revisions',
+                _SalaryWorkspaceMode.arrears =>
+                  'Review revision arrears or use Payroll to add manual arrears',
+              }),
             ],
           ),
         ),
@@ -648,10 +2160,12 @@ class _SalaryEmployeeCard extends StatelessWidget {
   const _SalaryEmployeeCard({
     required this.employee,
     required this.year,
+    required this.mode,
     required this.open,
   });
   final SalaryRosterEmployee employee;
   final int year;
+  final _SalaryWorkspaceMode mode;
   final VoidCallback open;
 
   @override
@@ -745,8 +2259,16 @@ class _SalaryEmployeeCard extends StatelessWidget {
                 alignment: Alignment.centerRight,
                 child: TextButton.icon(
                   onPressed: open,
-                  icon: const Icon(Icons.history),
-                  label: const Text('Structure & revisions'),
+                  icon: Icon(switch (mode) {
+                    _SalaryWorkspaceMode.structure => Icons.edit_outlined,
+                    _SalaryWorkspaceMode.revisions => Icons.trending_up,
+                    _SalaryWorkspaceMode.arrears => Icons.add_card_outlined,
+                  }),
+                  label: Text(switch (mode) {
+                    _SalaryWorkspaceMode.structure => 'View & assign structure',
+                    _SalaryWorkspaceMode.revisions => 'Revision history',
+                    _SalaryWorkspaceMode.arrears => 'Review arrears',
+                  }),
                 ),
               ),
             ],

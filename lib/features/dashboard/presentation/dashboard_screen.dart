@@ -448,12 +448,6 @@ class DashboardScreen extends ConsumerWidget {
           '/projects',
         ),
       const _Module(
-        'Performance',
-        Icons.insights_outlined,
-        VistoraColors.cyan,
-        '/performance',
-      ),
-      const _Module(
         'Interviews',
         Icons.record_voice_over_outlined,
         VistoraColors.pink,

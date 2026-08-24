@@ -18,27 +18,27 @@ Status meanings: **Implemented** is API-connected, **Tested** has automated cove
 |---|---|---|---|---|
 | Role-aware dashboard | All tenant roles | Existing dashboard endpoints | Tested | Employee/Supervisor own metrics, manager pending actions, holidays and next-three-day MR visits |
 | Own attendance and GPS punch | Employee, Supervisor | Ready | Tested | Clock-in/out, server geofence, current state, monthly calendar, in/out time and worked hours |
-| Tenant/subordinate attendance | Admin, HR, Supervisor | Ready | Tested | Search by name/code, employee details, live punch/location and monthly calendar |
+| Tenant/subordinate attendance | Admin, HR, Supervisor | Ready | Verified | Debounced name/code search, color-coded responsive data tables, live punch/location, detail sheet and monthly in/out/worked-hours table |
 | Own leave | Employee, Supervisor | Ready | Tested | Correct approved-used balance, apply, status history, filters and pagination |
 | Leave review | Admin, HR, Supervisor | Ready | Tested | Pending/approved/rejected tabs, live search, subordinate scope and approve/reject/revert |
 | Holidays | All; Admin/HR writes | Database-backed API | Tested | Upcoming dashboard, calendar and manager CRUD; no browser-storage source of truth |
-| Personal payslips | Employee, Supervisor | Self-scoped | Tested | Month/year pagination, brief cards, detail and tenant-branded PDF preview/share |
-| Admin payslip directory | Admin, HR | Tenant-scoped search/filter API | Tested | Employee identity, month/year/search/pagination and detailed salary statement |
+| Personal payslips | Employee, Supervisor | Self-scoped | Verified | Month/year pagination, brief cards, full Laravel-equivalent salary statement and tenant-branded PDF preview/share |
+| Admin payslip directory | Admin, HR | Tenant-scoped search/filter API | Verified | Employee identity, month/year/search/pagination and the same detailed salary statement available from released payroll |
 | Profile and security | All | Ready | Tested | Profile display and password change |
 | Assigned project work | Employee, Supervisor | Feature-gated | Tested | Own assignments and progress submissions |
-| Performance history | Employee, Supervisor | Ready | Tested | Role-scoped review history and typed scores |
-| Interview panel work | Assigned panelists | Ready | Tested | Assigned schedules and create/update feedback |
+| Performance history | Employee, Supervisor | Not present in authoritative Laravel UI | Not Applicable to Mobile | Removed from Flutter navigation so mobile does not expose a Laravel-nonexistent module |
+| Interview panel work | Assigned panelists | Ready | Verified | Assigned candidate, schedule/mode/contact/resume/notes, rating/recommendation and create/update feedback |
 
 ## HR and payroll administration
 
 | Feature | Roles | Laravel/API | Flutter | Evidence |
 |---|---|---|---|---|
 | Employee directory | Admin, HR | Search/status/pagination | Tested | Add/edit, activate/deactivate, credentials, salary snapshot and attendance links |
-| Salary structures and revisions | Admin, HR | Existing APIs plus optional mobile pagination/search | Tested | Search/year roster, structure detail, revision/arrears history and safe latest-revision rollback |
-| Component/formula Salary Designer | Admin, HR | Existing web designer | Not Applicable to Mobile | Formula/template authoring remains desktop; configured structures and operational revisions are available on mobile |
-| Payroll cycles | Admin, HR | Ready | Tested | Initiate, attendance deduction calculation/rollback, hold, release workflow, arrears and employee controls |
+| Salary structures and revisions | Admin, HR | Existing APIs plus optional mobile pagination/search | Verified | Search/year roster, pay-group assignment and breakup preview, structure update, revision/arrears history and safe latest-revision rollback |
+| Component/formula Salary Designer | Admin, HR | Existing tenant-local designer plus API-backed employee structures | Verified | Mobile now provides Pay Components, Pay Groups, Formula Builder, Salary Structure, Revisions and Arrears workspaces with tenant-isolated persistence |
+| Payroll cycles | Admin, HR | Ready | Verified | Initiate, employee selection, deduction calculation/rollback, hold, release/rollback, editable salary breakup, arrears, field expense and released salary-slip controls |
 | MR expense payroll inclusion | Admin, HR | Added | Tested | Approved same-month claims, multi-select/bulk or individual include, reversible ledger and released-cycle lock |
-| Recruitment pipeline | Admin, HR | Ready | Tested | Search, status pipeline actions, candidate creation and interview scheduling |
+| Recruitment pipeline | Admin, HR | Ready | Verified | Search, status pipeline actions, candidate creation, panelist interview assignment/rescheduling and notification |
 | Offer letters | Admin, HR | Added persistent offers | Tested | Template authoring, tenant-branded generation, preview, list/filter and status actions |
 | Appointment letters | Admin, HR | Ready | Tested | Employee/template selection, generation, paginated list and preview |
 | Full & Final settlements | Admin, HR | Ready | Tested | Calculate, edit, review/approve/revoke and multi-record disbursement |

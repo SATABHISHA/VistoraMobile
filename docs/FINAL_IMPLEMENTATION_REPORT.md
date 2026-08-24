@@ -84,7 +84,7 @@ The formula/component Salary Designer remains a desktop-authoring workflow. Mobi
 - Targeted new Flutter suites: 4 tests passed.
 - `flutter build apk --debug`: passed.
 - APK SHA-256: `D3DF6988103ABAC97DD33C0BF69A62322191A4250E3BC7977FA65C35602F16D0`.
-- Laravel Feature suite: 56 tests passed, 535 assertions.
+- Laravel Feature suite: 57 tests passed, 536 assertions.
 - Laravel Pint on changed PHP files: passed.
 - Blade view clear/cache compilation: passed.
 - MR JavaScript syntax check: passed.
@@ -94,10 +94,14 @@ The formula/component Salary Designer remains a desktop-authoring workflow. Mobi
 - MR expense and payroll route registration: verified.
 - Interactive browser smoke testing was unavailable because no browser session was connected.
 - iOS compilation requires macOS/Xcode and was not executable from this Windows host.
+- Live web root: `https://vistora.ahanova.in/` returned `200 OK`.
+- Live API health: `https://vistora.ahanova.in/api/v1/health` returned healthy.
+- Live `migrate:status`: both new migrations are `Ran`.
+- Live AHN001 seeded records after deployment: 14 doctors, 8 locations, 19 assignments, and 10 visit reports.
 
-## Deployment boundary
+## Deployment result
 
-No live deployment or live database migration was performed for this implementation. Production deployment remains a separate, explicit operation.
+The Laravel release was deployed to `vistora.ahanova.in` using the guarded Hostinger deployment script. The deployment created a compressed pre-migration backup on the server, uploaded the application, ran only the two pending additive migrations, rebuilt dependencies/caches, and brought the application back online. The idempotent `MrDemoDataSeeder` was then executed for `AHN001` and verified by read-only counts. No destructive migration, rollback, refresh, truncate, or full database seed was run.
 
 ## Complete changed-file inventory
 

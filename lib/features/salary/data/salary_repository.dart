@@ -42,6 +42,26 @@ class SalaryRepository {
     return SalaryEmployeeDetail.fromJson(asMap(response['data']));
   }
 
+  Future<void> upsertStructure({
+    required int employeeId,
+    required int year,
+    required String payGroupName,
+    required Map<String, dynamic> payGroupSnapshot,
+    required double annualCtc,
+    required SalaryBreakup breakup,
+  }) => _api.put(
+    '/employees/$employeeId/salary-structures',
+    data: {
+      'year': year,
+      'pay_group_name': payGroupName,
+      'pay_group_snapshot': payGroupSnapshot,
+      'ctc_annual': annualCtc,
+      'gross_monthly': breakup.grossMonthly.round(),
+      'deduction_monthly': breakup.deductionMonthly.round(),
+      'net_monthly': breakup.netMonthly.round(),
+    },
+  );
+
   Future<void> revise({
     required int employeeId,
     required int year,

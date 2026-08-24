@@ -36,4 +36,48 @@ void main() {
     expect(revision.canRollback, isTrue);
     expect(revision.arrearsDue, 10000);
   });
+
+  test('calculates the Laravel default pay group formulas', () {
+    final designer = SalaryDesignerState.defaults;
+    final breakup = designer.calculate(designer.payGroups.first, 600000);
+
+    expect(breakup.lines, hasLength(7));
+    expect(
+      breakup.lines
+          .singleWhere((line) => line.component.code == 'BASIC')
+          .monthly,
+      20000,
+    );
+    expect(
+      breakup.lines
+          .singleWhere((line) => line.component.code == 'PF_EMP')
+          .monthly,
+      2400,
+    );
+    expect(breakup.grossMonthly, 46250);
+    expect(breakup.deductionMonthly, 2600);
+    expect(breakup.netMonthly, 43650);
+  });
+
+  test('round trips tenant salary designer definitions', () {
+    final original = SalaryDesignerState.defaults.copyWith(
+      components: [
+        ...SalaryDesignerState.defaults.components,
+        const SalaryPayComponent(
+          id: 8,
+          name: 'Flexible',
+          code: 'FL',
+          type: 'Earning',
+          taxable: '0',
+          description: 'Flexible allowance',
+        ),
+      ],
+    );
+
+    final restored = SalaryDesignerState.fromJson(original.toJson());
+
+    expect(restored.components.last.code, 'FL');
+    expect(restored.payGroups.first.componentIds, hasLength(7));
+    expect(restored.formulas.last.value, 200);
+  });
 }

@@ -206,24 +206,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 const EmployeeWorkScreen(initialIndex: 0),
           ),
           GoRoute(
-            path: '/performance',
-            builder: (context, state) => EmployeeWorkScreen(
-              initialIndex:
-                  ref.read(authControllerProvider).session?.features.projects ==
-                      true
-                  ? 1
-                  : 0,
-            ),
-          ),
-          GoRoute(
             path: '/interviews',
-            builder: (context, state) => EmployeeWorkScreen(
-              initialIndex:
-                  ref.read(authControllerProvider).session?.features.projects ==
-                      true
-                  ? 2
-                  : 1,
-            ),
+            builder: (context, state) {
+              final session = ref.read(authControllerProvider).session!;
+              if (session.user.isCompanyManager) {
+                return const HrOperationsScreen();
+              }
+              return EmployeeWorkScreen(
+                initialIndex: session.features.projects ? 1 : 0,
+              );
+            },
           ),
         ],
       ),

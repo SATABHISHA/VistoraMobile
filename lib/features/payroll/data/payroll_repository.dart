@@ -26,9 +26,13 @@ class PayrollRepository {
     );
   }
 
-  Future<void> initiate({required int year, required int month}) => _api.post(
+  Future<void> initiate({
+    required int year,
+    required int month,
+    List<int>? employeeIds,
+  }) => _api.post(
     '/payroll/cycles/initiate',
-    data: {'year': year, 'month': month},
+    data: {'year': year, 'month': month, 'employee_ids': ?employeeIds},
   );
 
   Future<void> calculateDeductions(int cycleId, {List<int>? employeeIds}) =>
@@ -58,8 +62,10 @@ class PayrollRepository {
   Future<void> rollbackCycle(int cycleId) =>
       _api.post('/payroll/cycles/$cycleId/rollback');
 
-  Future<void> putOnHold(int cycleId) =>
-      _api.post('/payroll/cycles/$cycleId/on-hold');
+  Future<void> putOnHold(int cycleId, {List<int>? employeeIds}) => _api.post(
+    '/payroll/cycles/$cycleId/on-hold',
+    data: {'employee_ids': ?employeeIds},
+  );
 
   Future<void> release(int cycleId) async {
     final taskResponse = await _api.post(
@@ -85,4 +91,31 @@ class PayrollRepository {
       if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
     },
   );
+
+  Future<void> updateEmployee({
+    required int cycleId,
+    required int payrollItemId,
+    required double baseAmount,
+    required double grossAmount,
+    required double statutoryDeduction,
+    required double attendanceDeduction,
+    required double arrearsAmount,
+    required List<PayrollComponent> components,
+  }) => _api.put(
+    '/payroll/cycles/$cycleId/employees/$payrollItemId',
+    data: {
+      'base_amount': baseAmount,
+      'gross_amount': grossAmount,
+      'statutory_deduction_amount': statutoryDeduction,
+      'attendance_deduction_amount': attendanceDeduction,
+      'deduction_amount': attendanceDeduction,
+      'arrears_amount': arrearsAmount,
+      'components': components.map((item) => item.toJson()).toList(),
+    },
+  );
+
+  Future<void> rollbackEmployee({
+    required int cycleId,
+    required int payrollItemId,
+  }) => _api.post('/payroll/cycles/$cycleId/employees/$payrollItemId/rollback');
 }

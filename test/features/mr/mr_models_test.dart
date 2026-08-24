@@ -16,13 +16,17 @@ void main() {
       'employees': [
         {'id': 4, 'emp_code': 'E004', 'first_name': 'Asha', 'last_name': 'Roy'},
       ],
-      'settings': {'max_locations_per_doctor': 3},
+      'settings': {
+        'max_locations_per_doctor': 3,
+        'auto_confirm_visit_reports': true,
+      },
     });
 
     expect(metadata.businessUnits.single.name, 'Pharma');
     expect(metadata.employees.single.name, 'Asha Roy');
     expect(metadata.employees.single.code, 'E004');
     expect(metadata.settings.maxLocationsPerDoctor, 3);
+    expect(metadata.settings.autoConfirmVisitReports, isTrue);
   });
 
   test('parses doctor locations and optional geofence configuration', () {
@@ -105,6 +109,7 @@ void main() {
       'assignment_id': 10,
       'employee_id': 4,
       'status': 'rejected',
+      'auto_confirmed': true,
       'visited_at': '2026-08-21T10:30:00Z',
       'review_notes': 'Location needs verification',
       'submission_count': 2,
@@ -125,6 +130,7 @@ void main() {
     expect(report.submissionCount, 2);
     expect(report.rollbackNotes, 'Submitted the wrong notes');
     expect(report.capturedAddress, '12 Park Street, Kolkata');
+    expect(report.autoConfirmed, isTrue);
   });
 
   test('parses MR audit actor and subject employee', () {

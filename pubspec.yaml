@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+1
+version: 1.0.1+2
 
 environment:
   sdk: ^3.10.7
@@ -46,6 +46,9 @@ dependencies:
   file_picker: ^12.0.0
   path_provider: ^2.1.6
   open_filex: ^4.7.0
+  package_info_plus: ^10.2.1
+  url_launcher: ^6.3.2
+  in_app_update: ^4.2.5
 
 dev_dependencies:
   flutter_test:
@@ -58,6 +61,7 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
   mocktail: ^1.0.5
+  flutter_launcher_icons: ^0.14.4
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -97,6 +101,14 @@ flutter:
   #       - asset: fonts/TrajanPro.ttf
   #       - asset: fonts/TrajanPro_Bold.ttf
   #         weight: 700
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: assets/branding/vistora_launcher.png
+  adaptive_icon_background: '#0B0D22'
+  adaptive_icon_foreground: assets/branding/vistora_launcher.png
+  remove_alpha_ios: true
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package

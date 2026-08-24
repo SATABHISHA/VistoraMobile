@@ -40,16 +40,6 @@ class EmployeeWorkRepository {
     },
   );
 
-  Future<List<PerformanceReviewItem>> performance({int? employeeId}) async {
-    final response = await _api.get(
-      '/performance',
-      queryParameters: {'employee_id': ?employeeId, 'perPage': 50},
-    );
-    return _items(
-      response,
-    ).map((item) => PerformanceReviewItem.fromJson(asMap(item))).toList();
-  }
-
   Future<List<InterviewTask>> interviews() async {
     final response = await _api.get('/recruitment/interviews/mine');
     return _items(

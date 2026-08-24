@@ -185,7 +185,7 @@ class _PayslipsScreenState extends ConsumerState<PayslipsScreen> {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (_) => _PayslipSheet(item: item, companyName: companyName),
+      builder: (_) => PayslipSheet(item: item, companyName: companyName),
     );
   }
 }
@@ -360,6 +360,7 @@ class _AdminPayslipsViewState extends ConsumerState<_AdminPayslipsView> {
             ...visibleEmployees.map(
               (item) => _AdminPayslipCard(
                 item: item,
+                cycle: cycle,
                 companyName: collection.companyName,
               ),
             ),
@@ -457,8 +458,13 @@ class _PayrollOverview extends StatelessWidget {
 }
 
 class _AdminPayslipCard extends StatelessWidget {
-  const _AdminPayslipCard({required this.item, required this.companyName});
+  const _AdminPayslipCard({
+    required this.item,
+    required this.cycle,
+    required this.companyName,
+  });
   final PayrollEmployeeSummary item;
+  final PayrollCycleSummary cycle;
   final String companyName;
 
   @override
@@ -557,66 +563,12 @@ class _AdminPayslipCard extends StatelessWidget {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (_) => Padding(
-        padding: const EdgeInsets.all(22),
-        child: ListView(
-          shrinkWrap: true,
-          children: [
-            Text(companyName, style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 4),
-            Text(
-              item.employeeName,
-              style: Theme.of(
-                context,
-              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900),
-            ),
-            Text(
-              '${item.employeeCode} • ${item.status.toUpperCase()}',
-              style: const TextStyle(color: VistoraColors.muted),
-            ),
-            const Divider(height: 28),
-            _info('Email', item.employeeEmail ?? 'Not available'),
-            _info('Mobile', item.employeeMobile ?? 'Not available'),
-            _info('Gross salary', _money(item.grossAmount)),
-            _info('Base salary', _money(item.baseAmount)),
-            _info('Statutory deductions', _money(item.statutoryDeduction)),
-            _info('Attendance deductions', _money(item.attendanceDeduction)),
-            _info('Arrears / adjustments', _money(item.arrears)),
-            if (item.mrExpense > 0)
-              _info('Approved field expenses', _money(item.mrExpense)),
-            _info('Net payable', _money(item.netPayable)),
-            const Divider(height: 28),
-            Text(
-              'Attendance impact',
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Paid leave ${item.paidLeaveDays} • Pending leave ${item.pendingLeaveDays} • Missing check-ins ${item.missingAttendanceDays} • Holidays ${item.holidayDays}',
-              style: const TextStyle(color: VistoraColors.muted),
-            ),
-          ],
-        ),
+      builder: (_) => PayslipSheet(
+        item: Payslip.fromPayroll(cycle: cycle, employee: item),
+        companyName: companyName,
       ),
     );
   }
-
-  static Widget _info(String label, String value) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 6),
-    child: Row(
-      children: [
-        Expanded(
-          child: Text(
-            label,
-            style: const TextStyle(color: VistoraColors.muted),
-          ),
-        ),
-        Text(value, style: const TextStyle(fontWeight: FontWeight.w800)),
-      ],
-    ),
-  );
 
   static Widget _pill(String text, {Color color = VistoraColors.muted}) =>
       DecoratedBox(
@@ -696,8 +648,12 @@ class _PayslipCard extends StatelessWidget {
   );
 }
 
-class _PayslipSheet extends StatelessWidget {
-  const _PayslipSheet({required this.item, required this.companyName});
+class PayslipSheet extends StatelessWidget {
+  const PayslipSheet({
+    required this.item,
+    required this.companyName,
+    super.key,
+  });
   final Payslip item;
   final String companyName;
 
@@ -710,8 +666,32 @@ class _PayslipSheet extends StatelessWidget {
       controller: controller,
       padding: const EdgeInsets.all(22),
       children: [
-        Text(companyName, style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 20),
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(22),
+            gradient: const LinearGradient(
+              colors: [Color(0xFF3B201D), Color(0xFF082C43)],
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                companyName,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 3),
+              const Text(
+                'Employee Salary Statement',
+                style: TextStyle(color: VistoraColors.muted),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 18),
         Row(
           children: [
             Expanded(
@@ -737,10 +717,20 @@ class _PayslipSheet extends StatelessWidget {
         const Divider(height: 30),
         _detail('Employee', item.employeeName),
         _detail('Employee code', item.employeeCode),
-        _detail('Gross earnings', _money(item.grossAmount)),
-        _detail('Base salary', _money(item.baseAmount)),
-        _detail('Statutory deductions', _money(item.statutoryDeduction)),
-        _detail('Attendance deductions', _money(item.attendanceDeduction)),
+        if (item.employeeEmail != null) _detail('Email', item.employeeEmail!),
+        if (item.employeeMobile != null)
+          _detail('Mobile', item.employeeMobile!),
+        const SizedBox(height: 20),
+        _section(context, 'Salary breakup'),
+        const SizedBox(height: 10),
+        if (item.components.isNotEmpty) _componentTable(item.components),
+        _detail('Gross monthly', _money(item.grossAmount)),
+        _detail('Statutory deductions', '- ${_money(item.statutoryDeduction)}'),
+        _detail('Net salary before attendance', _money(item.baseAmount)),
+        _detail(
+          'Attendance / LOP (${_days(item.deductionDays)} days)',
+          '- ${_money(item.attendanceDeduction)}',
+        ),
         _detail('Arrears / adjustments', _money(item.arrearsAmount)),
         if (item.mrExpenseAmount > 0)
           _detail('Approved field expenses', _money(item.mrExpenseAmount)),
@@ -769,6 +759,31 @@ class _PayslipSheet extends StatelessWidget {
             ),
           ),
         ),
+        const SizedBox(height: 22),
+        _section(context, 'Attendance impact'),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 9,
+          runSpacing: 9,
+          children: [
+            _metric('Present', '${item.presentDays}', VistoraColors.cyan),
+            _metric('Absent', '${item.absentDays}', VistoraColors.pink),
+            _metric('Half day', _days(item.halfDays), VistoraColors.amber),
+            _metric('Paid leave', '${item.paidLeaveDays}', VistoraColors.green),
+            _metric(
+              'Missing check-in',
+              '${item.missingAttendanceDays}',
+              VistoraColors.orange,
+            ),
+            _metric('Holidays', '${item.holidayDays}', VistoraColors.muted),
+          ],
+        ),
+        if (item.leaveBalances.isNotEmpty) ...[
+          const SizedBox(height: 22),
+          _section(context, 'Leave balance'),
+          const SizedBox(height: 10),
+          _leaveTable(item.leaveBalances),
+        ],
         const SizedBox(height: 12),
         FilledButton.icon(
           onPressed: () async {
@@ -803,6 +818,98 @@ class _PayslipSheet extends StatelessWidget {
       ],
     ),
   );
+
+  static Widget _section(BuildContext context, String value) => Text(
+    value.toUpperCase(),
+    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+      color: VistoraColors.orange,
+      fontWeight: FontWeight.w900,
+      letterSpacing: .8,
+    ),
+  );
+
+  static Widget _metric(String label, String value, Color color) => Container(
+    width: 126,
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: .09),
+      borderRadius: BorderRadius.circular(15),
+      border: Border.all(color: color.withValues(alpha: .24)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 11)),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: TextStyle(
+            color: color,
+            fontSize: 18,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ],
+    ),
+  );
+
+  static Widget _componentTable(List<PayslipComponent> components) =>
+      SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: DataTable(
+          headingRowColor: WidgetStatePropertyAll(
+            VistoraColors.cyan.withValues(alpha: .08),
+          ),
+          columns: const [
+            DataColumn(label: Text('Component')),
+            DataColumn(label: Text('Type')),
+            DataColumn(label: Text('Monthly'), numeric: true),
+          ],
+          rows: components
+              .map(
+                (item) => DataRow(
+                  cells: [
+                    DataCell(Text(item.name)),
+                    DataCell(Text(item.type)),
+                    DataCell(Text(_money(item.amount))),
+                  ],
+                ),
+              )
+              .toList(),
+        ),
+      );
+
+  static Widget _leaveTable(List<PayslipLeaveBalance> balances) =>
+      SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: DataTable(
+          headingRowColor: WidgetStatePropertyAll(
+            VistoraColors.green.withValues(alpha: .08),
+          ),
+          columns: const [
+            DataColumn(label: Text('Leave type')),
+            DataColumn(label: Text('Credited'), numeric: true),
+            DataColumn(label: Text('Used'), numeric: true),
+            DataColumn(label: Text('Remaining'), numeric: true),
+          ],
+          rows: balances
+              .map(
+                (item) => DataRow(
+                  cells: [
+                    DataCell(Text(item.name)),
+                    DataCell(Text(_days(item.credited))),
+                    DataCell(Text(_days(item.used))),
+                    DataCell(Text(_days(item.balance))),
+                  ],
+                ),
+              )
+              .toList(),
+        ),
+      );
+
+  static String _days(double value) => value == value.roundToDouble()
+      ? value.toInt().toString()
+      : value.toStringAsFixed(1);
 }
 
 String _money(double value) =>
