@@ -519,6 +519,50 @@ All endpoints require Sanctum, tenant context and the enabled MR module. Amount 
 
 ### GET `/superadmin/payments`
 
+- Role: Superadmin
+- Query: `q` (tenant name, Corp ID or GSTIN), `month`, `year`, `page`, `perPage`
+- Success: paginated payments with tenant identity and generated invoice number
+
+### POST `/superadmin/payments`
+
+### PUT/DELETE `/superadmin/payments/{payment}`
+
+- Role: Superadmin
+- Purpose: one of `installation`, `initial`, `advance`, `period`
+- Period payments accept `monthly`, `quarterly`, `yearly`, or `custom`; Laravel derives standard start/end dates from `payment_date`
+- Custom period requires `period_start` and `period_end`
+- Payment mode: `cash`, `cheque`, `online`, `neft`, or `upi`; cheque mode requires `cheque_no`
+- GST: disabled, `cgst_sgst`, or `igst`; Laravel validates provider configuration and tenant GSTIN, calculates split tax amounts, and rejects mixed tax modes
+- Create and update are transactional. Delete soft-deletes the payment and invoice without touching tenant or HRMS data.
+
+### GET `/superadmin/payments/{payment}/invoice`
+
+- Role: Superadmin
+- Success: typed `invoice`, `payment`, `provider`, and `client` objects, including immutable invoice number, provider/client snapshots, tax breakup, payment reference, billing period, and optional seal URL
+- Flutter: animated preview plus native print/share/download PDF
+
+### GET/PUT `/superadmin/settings`
+
+### POST `/superadmin/settings/seal`
+
+- Role: Superadmin
+- Settings: provider/product identity, address, GSTIN, contact details, website, GST enablement, mutually exclusive GST mode/rates, and optional invoice seal
+- Seal upload: multipart image (`png`, `jpg`, `jpeg`, or `webp`), maximum 2 MB
+
+### PUT `/superadmin/tenants/{tenant}/billing-profile`
+
+- Role: Superadmin
+- Writable fields are deliberately restricted to `gstin` and `phone`; tenant name, Corp ID, features, and status cannot be changed through this endpoint
+
+### GET `/tax-invoices`
+
+### GET `/tax-invoices/{invoice}`
+
+- Roles: Admin, HR
+- Query: `q`, `month`, `year`, `page`, `perPage`
+- Laravel derives `corp_id` from the authenticated Sanctum user and returns `404` for another tenant's invoice
+- Flutter: tenant billing vault with live search, month/year filters, pagination, animated cards, full invoice preview, print and PDF sharing
+
 ### GET `/superadmin/onboarding`
 
 - Role: Superadmin

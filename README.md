@@ -83,9 +83,9 @@ Sanctum tokens are stored with `flutter_secure_storage`. Widgets do not perform 
 ## Implemented workspaces
 
 - Employee/Supervisor: dashboard, attendance, leave, holidays, payslips, assigned projects, performance history, interview-panel feedback and profile/security.
-- Admin/HR: employee directory, team attendance and leave actions, salary structures/revisions, payroll, recruitment, interview scheduling, offer letters, appointment letters, F&F settlements, secure files and company settings.
+- Admin/HR: employee directory, team attendance and leave actions, salary structures/revisions, payroll, recruitment, interview scheduling, offer letters, appointment letters, F&F settlements, secure files, company settings and a tenant-isolated tax-invoice vault.
 - MR: doctor-location management, subordinate assignment, visit capture/review/audit and MR Field Expenses with approval and payroll reimbursement inclusion/reversal.
-- Superadmin: platform overview, companies, payments and onboarding.
+- Superadmin: platform overview, companies, onboarding, provider billing/GST settings, seal upload, and complete payment/tax-invoice administration.
 
 The component/formula Salary Designer remains a desktop authoring surface because it configures complex pay templates. Flutter consumes the resulting authoritative structures and supports operational year search, detail, revisions, arrears and latest-revision rollback.
 
@@ -105,6 +105,8 @@ MR Field Expenses mirror the client workbook's daily HQ, EX HQ and Outstation st
 Payslip PDFs are generated from the authenticated payslip API payload, matching the existing Laravel employee portal behavior, and can be previewed, printed or shared using the native platform sheet.
 
 Payslip PDFs and previews use the authenticated tenant's company name. Admin and HR users also have a responsive Payroll Administration screen with server-authoritative attendance/leave deductions, bulk or per-employee recalculation, and reversible deduction rollback.
+
+Platform billing supports installation, initial, advance and recurring-period payments. Laravel derives standard billing periods, validates mutually exclusive CGST/SGST or IGST, snapshots provider and tenant billing identities, and issues invoice numbers no longer than 12 characters. Superadmin can search, filter, edit, view, share or soft-delete invoices; Admin/HR users can view, print and share only invoices issued to their authenticated tenant.
 
 Authenticated screens share a role-aware bottom navigation bar. Android back from any top-level section returns to Dashboard; back from Dashboard exits normally. Admin/HR payslips provide month/year filtering, employee search, identity/contact details, payroll totals, deduction breakdowns, and employee detail sheets.
 

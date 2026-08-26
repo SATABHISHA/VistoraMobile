@@ -22,6 +22,7 @@ import 'package:vistora_mobile/features/platform_admin/presentation/platform_adm
 import 'package:vistora_mobile/features/profile/presentation/profile_screen.dart';
 import 'package:vistora_mobile/features/salary/presentation/salary_management_screen.dart';
 import 'package:vistora_mobile/features/tenant_settings/presentation/tenant_settings_screen.dart';
+import 'package:vistora_mobile/features/tax_invoices/presentation/tax_invoices_screen.dart';
 import 'package:vistora_mobile/features/work/presentation/employee_work_screen.dart';
 
 final _routerRefreshProvider = Provider<ValueNotifier<AuthStatus>>((ref) {
@@ -99,6 +100,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       }
       if (auth.status == AuthStatus.authenticated &&
           path == '/salary-structures' &&
+          !const {'admin', 'hr'}.contains(auth.session?.user.normalizedRole)) {
+        return '/dashboard';
+      }
+      if (auth.status == AuthStatus.authenticated &&
+          path == '/tax-invoices' &&
           !const {'admin', 'hr'}.contains(auth.session?.user.normalizedRole)) {
         return '/dashboard';
       }
@@ -180,6 +186,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             path: '/company-settings',
             builder: (context, state) => const TenantSettingsScreen(),
           ),
+          GoRoute(
+            path: '/tax-invoices',
+            builder: (context, state) => const TaxInvoicesScreen(),
+          ),
           GoRoute(path: '/mr', builder: (context, state) => const MrScreen()),
           GoRoute(
             path: '/platform',
@@ -199,6 +209,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             path: '/platform/onboarding',
             builder: (context, state) =>
                 const PlatformAdminScreen(initialIndex: 3),
+          ),
+          GoRoute(
+            path: '/platform/settings',
+            builder: (context, state) =>
+                const PlatformAdminScreen(initialIndex: 4),
           ),
           GoRoute(
             path: '/projects',

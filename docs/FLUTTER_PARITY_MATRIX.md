@@ -44,7 +44,9 @@ Status meanings: **Implemented** is API-connected, **Tested** has automated cove
 | Full & Final settlements | Admin, HR | Ready | Tested | Calculate, edit, review/approve/revoke and multi-record disbursement |
 | Secure file manager | Admin, HR | Ready with optional pagination/search | Tested | Quota, folders, employee folders, upload, download/open and delete |
 | Company settings | Admin, HR | Existing settings APIs | Tested | Company profile, organisation masters, geofence and SMTP settings/test |
-| Platform administration | Superadmin | Existing plus paginated payment endpoint | Tested | Overview, companies, payments and onboarding workspaces with dedicated navigation |
+| Platform administration | Superadmin | Extended billing and tenant APIs | Tested | Overview, companies, onboarding, restricted GSTIN/phone tenant details, provider GST settings and seal upload |
+| Platform payments and tax invoices | Superadmin | Added transactional invoice APIs | Tested | Installation/initial/advance/period payments, automatic/custom periods, split GST, payment modes, search/filter/pagination, edit, soft-delete, preview, print and PDF share |
+| Tenant tax-invoice vault | Admin, HR | Added tenant-isolated invoice APIs | Tested | Live search, month/year filters, pagination, animated summary cards, branded detail, print and PDF share/download |
 | Public candidate application and employee invitation forms | Public links | Existing browser endpoints | Not Applicable to Mobile | These links intentionally open as responsive web onboarding forms; managers create employees directly in mobile |
 
 ## Medical Representative module

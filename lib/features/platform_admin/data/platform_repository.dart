@@ -1,6 +1,8 @@
+import 'package:dio/dio.dart';
 import 'package:vistora_mobile/core/api/api_client.dart';
 import 'package:vistora_mobile/core/api/api_parsing.dart';
 import 'package:vistora_mobile/features/platform_admin/domain/platform_models.dart';
+import 'package:vistora_mobile/features/tax_invoices/domain/tax_invoice_models.dart';
 
 class PlatformRepository {
   const PlatformRepository(this._api);
@@ -47,6 +49,18 @@ class PlatformRepository {
   Future<void> updateTenant(int tenantId, Map<String, dynamic> data) =>
       _api.put('/superadmin/tenants/$tenantId', data: data);
 
+  Future<PlatformTenant> updateTenantBillingProfile({
+    required int tenantId,
+    String? gstin,
+    String? phone,
+  }) async {
+    final response = await _api.put(
+      '/superadmin/tenants/$tenantId/billing-profile',
+      data: {'gstin': gstin, 'phone': phone},
+    );
+    return PlatformTenant.fromJson(asMap(asMap(response['data'])['tenant']));
+  }
+
   Future<PlatformPage<PlatformPayment>> payments({
     String? query,
     int? month,
@@ -67,24 +81,52 @@ class PlatformRepository {
     PlatformPayment.fromJson,
   );
 
-  Future<void> recordPayment({
-    required String corpId,
-    required double amount,
-    required String periodType,
-    required DateTime paymentDate,
-    required bool gstEnabled,
-    double gstPercent = 18,
-  }) => _api.post(
-    '/superadmin/payments',
-    data: {
-      'corp_id': corpId,
-      'package_amount': amount,
-      'period_type': periodType,
-      'gst_enabled': gstEnabled,
-      'gst_percent': gstPercent,
-      'payment_date': _date(paymentDate),
-    },
-  );
+  Future<void> savePayment(PlatformPaymentDraft draft, {int? paymentId}) =>
+      paymentId == null
+      ? _api.post('/superadmin/payments', data: draft.toJson())
+      : _api.put('/superadmin/payments/$paymentId', data: draft.toJson());
+
+  Future<void> deletePayment(int paymentId) =>
+      _api.delete('/superadmin/payments/$paymentId');
+
+  Future<TaxInvoiceDetail> paymentInvoice(int paymentId) async {
+    final response = await _api.get('/superadmin/payments/$paymentId/invoice');
+    return TaxInvoiceDetail.fromJson(asMap(response['data']));
+  }
+
+  Future<PlatformBillingSettings> billingSettings() async {
+    final response = await _api.get('/superadmin/settings');
+    return PlatformBillingSettings.fromJson(
+      asMap(asMap(response['data'])['settings']),
+    );
+  }
+
+  Future<PlatformBillingSettings> saveBillingSettings(
+    PlatformBillingSettings settings,
+  ) async {
+    final response = await _api.put(
+      '/superadmin/settings',
+      data: settings.toJson(),
+    );
+    return PlatformBillingSettings.fromJson(
+      asMap(asMap(response['data'])['settings']),
+    );
+  }
+
+  Future<PlatformBillingSettings> uploadBillingSeal({
+    required String filename,
+    required List<int> bytes,
+  }) async {
+    final response = await _api.post(
+      '/superadmin/settings/seal',
+      data: FormData.fromMap({
+        'seal': MultipartFile.fromBytes(bytes, filename: filename),
+      }),
+    );
+    return PlatformBillingSettings.fromJson(
+      asMap(asMap(response['data'])['settings']),
+    );
+  }
 
   Future<PlatformPage<PlatformOnboardingItem>> onboarding({
     String? status,
@@ -123,9 +165,4 @@ class PlatformRepository {
       total: asInt(paginator['total'], raw.length),
     );
   }
-
-  static String _date(DateTime value) =>
-      '${value.year.toString().padLeft(4, '0')}-'
-      '${value.month.toString().padLeft(2, '0')}-'
-      '${value.day.toString().padLeft(2, '0')}';
 }

@@ -422,6 +422,13 @@ class DashboardScreen extends ConsumerWidget {
         ),
       if (const {'admin', 'hr'}.contains(session.user.normalizedRole))
         const _Module(
+          'Tax Invoices',
+          Icons.receipt_long_outlined,
+          VistoraColors.cyan,
+          '/tax-invoices',
+        ),
+      if (const {'admin', 'hr'}.contains(session.user.normalizedRole))
+        const _Module(
           'Salary Structures',
           Icons.account_balance_wallet_outlined,
           VistoraColors.green,
