@@ -206,7 +206,7 @@ class _ProjectUpdateSheetState extends ConsumerState<_ProjectUpdateSheet> {
           ),
           const SizedBox(height: 16),
           DropdownButtonFormField<String>(
-            initialValue: period,
+            value: period,
             decoration: const InputDecoration(labelText: 'Reporting period'),
             items: const ['daily', 'weekly', 'monthly']
                 .map(
@@ -599,7 +599,7 @@ class _InterviewFeedbackSheetState
           ),
           const SizedBox(height: 16),
           DropdownButtonFormField<int>(
-            initialValue: rating,
+            value: rating,
             decoration: const InputDecoration(labelText: 'Rating'),
             items: [5, 4, 3, 2, 1]
                 .map(
@@ -611,7 +611,7 @@ class _InterviewFeedbackSheetState
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
-            initialValue: recommendation,
+            value: recommendation,
             decoration: const InputDecoration(labelText: 'Recommendation'),
             items: const ['strong_hire', 'hire', 'hold', 'reject']
                 .map(

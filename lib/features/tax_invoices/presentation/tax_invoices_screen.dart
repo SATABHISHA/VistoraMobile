@@ -167,7 +167,7 @@ class _TaxInvoicesScreenState extends ConsumerState<TaxInvoicesScreen> {
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<int?>(
-                      initialValue: _month,
+                      value: _month,
                       decoration: const InputDecoration(labelText: 'Month'),
                       items: [
                         const DropdownMenuItem(value: null, child: Text('All')),
@@ -188,7 +188,7 @@ class _TaxInvoicesScreenState extends ConsumerState<TaxInvoicesScreen> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: DropdownButtonFormField<int?>(
-                      initialValue: _year,
+                      value: _year,
                       decoration: const InputDecoration(labelText: 'Year'),
                       items: [
                         const DropdownMenuItem(value: null, child: Text('All')),
@@ -209,7 +209,7 @@ class _TaxInvoicesScreenState extends ConsumerState<TaxInvoicesScreen> {
                   SizedBox(
                     width: 92,
                     child: DropdownButtonFormField<int>(
-                      initialValue: _perPage,
+                      value: _perPage,
                       decoration: const InputDecoration(labelText: 'Rows'),
                       items: const [10, 20, 50]
                           .map(

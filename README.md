@@ -26,10 +26,17 @@ Local Android emulator (default):
 flutter run --dart-define=APP_ENV=local --dart-define=API_BASE_URL=http://10.0.2.2:8000/api/v1
 ```
 
-iOS simulator:
+iOS simulator or physical iOS device (Xcode default):
 
 ```text
-flutter run --dart-define=APP_ENV=local --dart-define=API_BASE_URL=http://127.0.0.1:8000/api/v1
+flutter run
+```
+
+iOS defaults to the live API (`https://vistora.ahanova.in/api/v1`). To override
+it explicitly for a release build:
+
+```text
+flutter build ios --release --no-codesign --dart-define=APP_ENV=production --dart-define=API_BASE_URL=https://vistora.ahanova.in/api/v1
 ```
 
 Physical device on the same LAN:
@@ -66,10 +73,12 @@ On Windows, use the device-aware launcher. It offers detected wireless Android d
 
 See [`docs/LOCAL_RUN_GUIDE.md`](docs/LOCAL_RUN_GUIDE.md) for API URL overrides and wireless debugging setup.
 
-An iOS build must be run on macOS:
+An iOS build must be run on macOS. Open `ios/Runner.xcworkspace` (not the
+`.xcodeproj`) after `flutter pub get` and select a signing team in Xcode for a
+physical device:
 
 ```text
-flutter build ios --no-codesign --dart-define=APP_ENV=staging --dart-define=API_BASE_URL=https://staging.example.com/api/v1
+open ios/Runner.xcworkspace
 ```
 
 ## Architecture

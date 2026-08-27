@@ -277,7 +277,7 @@ class _TenantSettingsScreenState extends ConsumerState<TenantSettingsScreen>
       _field(_gstin, 'GSTIN'),
       _field(_timezone, 'Timezone'),
       DropdownButtonFormField<int>(
-        initialValue: _fiscalMonth,
+        value: _fiscalMonth,
         decoration: const InputDecoration(labelText: 'Financial year starts'),
         items: [
           for (var month = 1; month <= 12; month++)
@@ -320,7 +320,7 @@ class _TenantSettingsScreenState extends ConsumerState<TenantSettingsScreen>
         color: VistoraColors.cyan,
       ),
       DropdownButtonFormField<String>(
-        initialValue: _masterType,
+        value: _masterType,
         decoration: const InputDecoration(labelText: 'Master type'),
         items: const [
           DropdownMenuItem(value: 'branches', child: Text('Branches')),
@@ -457,7 +457,7 @@ class _TenantSettingsScreenState extends ConsumerState<TenantSettingsScreen>
         ),
       ),
       DropdownButtonFormField<String>(
-        initialValue: _encryption,
+        value: _encryption,
         decoration: const InputDecoration(labelText: 'Encryption'),
         items: const [
           DropdownMenuItem(value: 'tls', child: Text('TLS')),

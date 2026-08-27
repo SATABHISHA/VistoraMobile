@@ -66,13 +66,20 @@ class _AppUpdateGateState extends State<AppUpdateGate> {
               'Please install the latest version to continue using Vistora.',
         ),
         actions: [
+          if (_state?.manifest?.forceUpdate == false)
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Later'),
+            ),
           FilledButton.icon(
             onPressed: () async {
               final started = await _service.tryAndroidPlayUpdate();
               if (!started) await _service.openStore(_state?.manifest);
               if (context.mounted) Navigator.of(context).pop();
-              _dialogOpen = false;
-              await _checkForUpdate();
+              if (_state?.manifest?.forceUpdate != false) {
+                _dialogOpen = false;
+                await _checkForUpdate();
+              }
             },
             icon: const Icon(Icons.system_update_alt_rounded),
             label: const Text('Update now'),

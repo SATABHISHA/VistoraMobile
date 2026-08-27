@@ -1198,7 +1198,7 @@ class _FilterPanel extends StatelessWidget {
                   SizedBox(
                     width: fieldWidth,
                     child: DropdownButtonFormField<String?>(
-                      initialValue: status,
+                      value: status,
                       decoration: const InputDecoration(labelText: 'Status'),
                       items: [
                         const DropdownMenuItem<String?>(
@@ -1246,7 +1246,7 @@ class _FilterPanel extends StatelessWidget {
                 SizedBox(
                   width: compact ? (constraints.maxWidth - 10) / 2 : 130,
                   child: DropdownButtonFormField<int?>(
-                    initialValue: year,
+                    value: year,
                     decoration: const InputDecoration(labelText: 'Year'),
                     items: [
                       const DropdownMenuItem<int?>(
@@ -1269,7 +1269,7 @@ class _FilterPanel extends StatelessWidget {
                 SizedBox(
                   width: compact ? (constraints.maxWidth - 10) / 2 : 130,
                   child: DropdownButtonFormField<int>(
-                    initialValue: perPage,
+                    value: perPage,
                     decoration: const InputDecoration(labelText: 'Per page'),
                     items: const [
                       DropdownMenuItem(value: 10, child: Text('10')),

@@ -16,10 +16,12 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.3+4
+version: 1.0.3+6
 
 environment:
-  sdk: ^3.10.7
+  # Keep local development compatible with the installed Flutter/Dart 3.8
+  # toolchain while remaining compatible with newer stable Dart releases.
+  sdk: '>=3.8.0 <4.0.0'
 
 # Dependencies specify other packages that your package needs in order to work.
 # To automatically upgrade your package dependencies to the latest versions
@@ -35,18 +37,18 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   flutter_riverpod: ^3.3.2
-  go_router: ^17.5.0
+  go_router: ^17.0.0
   dio: ^5.11.0
   flutter_secure_storage: ^10.3.1
   connectivity_plus: ^7.3.1
   geolocator: ^14.0.2
-  intl: ^0.20.3
+  intl: ^0.19.0
   pdf: ^3.11.3
   printing: ^5.14.2
-  file_picker: ^12.0.0
-  path_provider: ^2.1.6
+  file_picker: ^8.3.7
+  path_provider: ^2.1.5
   open_filex: ^4.7.0
-  package_info_plus: ^10.2.1
+  package_info_plus: ^9.0.0
   url_launcher: ^6.3.2
   in_app_update: ^4.2.5
 

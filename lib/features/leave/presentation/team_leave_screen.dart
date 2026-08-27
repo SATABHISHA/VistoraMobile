@@ -213,7 +213,7 @@ class _TeamLeaveScreenState extends ConsumerState<TeamLeaveScreen> {
                 const SizedBox(height: 14),
                 if (options.isNotEmpty)
                   DropdownButtonFormField<int>(
-                    initialValue: selected,
+                    value: selected,
                     decoration: const InputDecoration(
                       labelText: 'Deduct from leave type',
                     ),

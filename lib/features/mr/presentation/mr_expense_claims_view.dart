@@ -296,7 +296,7 @@ class _MrExpenseClaimsViewState extends ConsumerState<MrExpenseClaimsView> {
                   SizedBox(
                     width: width,
                     child: DropdownButtonFormField<String?>(
-                      initialValue: _status,
+                      value: _status,
                       decoration: const InputDecoration(labelText: 'Status'),
                       items: const [
                         DropdownMenuItem(
@@ -326,7 +326,7 @@ class _MrExpenseClaimsViewState extends ConsumerState<MrExpenseClaimsView> {
                   SizedBox(
                     width: width,
                     child: DropdownButtonFormField<int?>(
-                      initialValue: _month,
+                      value: _month,
                       decoration: const InputDecoration(labelText: 'Month'),
                       items: [
                         const DropdownMenuItem(
@@ -350,7 +350,7 @@ class _MrExpenseClaimsViewState extends ConsumerState<MrExpenseClaimsView> {
                   SizedBox(
                     width: width,
                     child: DropdownButtonFormField<int?>(
-                      initialValue: _year,
+                      value: _year,
                       decoration: const InputDecoration(labelText: 'Year'),
                       items: [
                         const DropdownMenuItem(

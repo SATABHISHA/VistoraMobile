@@ -370,7 +370,7 @@ class _CompaniesViewState extends ConsumerState<_CompaniesView> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              initialValue: _status,
+              value: _status,
               decoration: const InputDecoration(labelText: 'Company status'),
               items: const [
                 DropdownMenuItem(value: 'all', child: Text('All statuses')),
@@ -609,7 +609,7 @@ class _PaymentsViewState extends ConsumerState<_PaymentsView> {
               children: [
                 Expanded(
                   child: DropdownButtonFormField<int?>(
-                    initialValue: _month,
+                    value: _month,
                     decoration: const InputDecoration(labelText: 'Month'),
                     items: [
                       const DropdownMenuItem(value: null, child: Text('All')),
@@ -630,7 +630,7 @@ class _PaymentsViewState extends ConsumerState<_PaymentsView> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: DropdownButtonFormField<int?>(
-                    initialValue: _year,
+                    value: _year,
                     decoration: const InputDecoration(labelText: 'Year'),
                     items: [
                       const DropdownMenuItem(value: null, child: Text('All')),
@@ -1454,7 +1454,7 @@ class _PaymentEditorSheetState extends State<_PaymentEditorSheet> {
             ),
             const SizedBox(height: 18),
             DropdownButtonFormField<String>(
-              initialValue: _corpId,
+              value: _corpId,
               decoration: const InputDecoration(
                 labelText: 'Company',
                 prefixIcon: Icon(Icons.apartment_outlined),
@@ -1536,7 +1536,7 @@ class _PaymentEditorSheetState extends State<_PaymentEditorSheet> {
             if (_paymentType == 'period') ...[
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
-                initialValue: _periodType,
+                value: _periodType,
                 decoration: const InputDecoration(
                   labelText: 'Billing frequency',
                   prefixIcon: Icon(Icons.date_range_outlined),
@@ -1687,7 +1687,7 @@ class _PaymentEditorSheetState extends State<_PaymentEditorSheet> {
             ),
             const SizedBox(height: 14),
             DropdownButtonFormField<String>(
-              initialValue: _paymentMode,
+              value: _paymentMode,
               decoration: const InputDecoration(
                 labelText: 'Payment mode',
                 prefixIcon: Icon(Icons.account_balance_wallet_outlined),
@@ -2026,12 +2026,20 @@ class _BillingSettingsViewState extends ConsumerState<_BillingSettingsView> {
   }
 
   Future<void> _uploadSeal() async {
-    final file = await FilePicker.pickFile(
+    final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: const ['png', 'jpg', 'jpeg', 'webp'],
+      withData: true,
     );
+    final file = result?.files.single;
     if (file == null) return;
-    final bytes = await file.readAsBytes();
+    final bytes = file.bytes;
+    if (bytes == null) {
+      if (mounted) {
+        _toast(context, 'Unable to read selected file.', error: true);
+      }
+      return;
+    }
     setState(() => _saving = true);
     try {
       final saved = await repository.uploadBillingSeal(

@@ -326,9 +326,10 @@ class _FolderSheetState extends ConsumerState<_FolderSheet> {
   }
 
   Future<void> _upload() async {
-    final picked = await FilePicker.pickFile();
+    final result = await FilePicker.platform.pickFiles();
+    final picked = result?.files.single;
     if (picked == null) return;
-    final fileSize = await picked.length();
+    final fileSize = picked.size;
     if (fileSize > 2 * 1024 * 1024) {
       _toast('Files must be 2 MB or smaller.', error: true);
       return;
@@ -339,7 +340,7 @@ class _FolderSheetState extends ConsumerState<_FolderSheet> {
         folderId: widget.folderId,
         fileName: picked.name,
         path: picked.path,
-        bytes: picked.path == null ? await picked.readAsBytes() : null,
+        bytes: picked.path == null ? picked.bytes : null,
       );
       await _refresh();
       _toast('File uploaded securely.');

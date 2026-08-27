@@ -208,7 +208,7 @@ class _RecruitmentTabState extends ConsumerState<_RecruitmentTab> {
                 ),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String?>(
-                  initialValue: _status,
+                  value: _status,
                   decoration: const InputDecoration(
                     labelText: 'Pipeline stage',
                   ),
@@ -1269,7 +1269,7 @@ class _InterviewEditorState extends State<_InterviewEditor> {
         label: Text(time.format(context)),
       ),
       DropdownButtonFormField<String>(
-        initialValue: mode,
+        value: mode,
         decoration: const InputDecoration(labelText: 'Mode'),
         items: const [
           DropdownMenuItem(value: 'in_person', child: Text('In person')),
@@ -1362,7 +1362,7 @@ class _OfferEditorState extends State<_OfferEditor> {
     title: 'Generate offer letter',
     children: [
       DropdownButtonFormField<int>(
-        initialValue: candidateId,
+        value: candidateId,
         decoration: const InputDecoration(labelText: 'Candidate *'),
         items: [
           for (final c in widget.candidates)
@@ -1379,7 +1379,7 @@ class _OfferEditorState extends State<_OfferEditor> {
         },
       ),
       DropdownButtonFormField<int>(
-        initialValue: templateId,
+        value: templateId,
         decoration: const InputDecoration(labelText: 'Template *'),
         items: [
           for (final t in widget.templates.where((t) => t.status == 'active'))
@@ -1513,7 +1513,7 @@ class _AppointmentEditorState extends State<_AppointmentEditor> {
     title: 'Generate appointment letter',
     children: [
       DropdownButtonFormField<int>(
-        initialValue: employeeId,
+        value: employeeId,
         decoration: const InputDecoration(labelText: 'Employee *'),
         items: [
           for (final e in widget.employees)
@@ -1531,7 +1531,7 @@ class _AppointmentEditorState extends State<_AppointmentEditor> {
         },
       ),
       DropdownButtonFormField<int>(
-        initialValue: templateId,
+        value: templateId,
         decoration: const InputDecoration(labelText: 'Template *'),
         items: [
           for (final t in widget.templates.where((t) => t.status == 'active'))
@@ -1609,7 +1609,7 @@ class _SettlementDateEditorState extends State<_SettlementDateEditor> {
     title: 'Calculate final settlement',
     children: [
       DropdownButtonFormField<int>(
-        initialValue: employeeId,
+        value: employeeId,
         decoration: const InputDecoration(labelText: 'Employee *'),
         items: [
           for (final e in widget.employees)
@@ -1954,7 +1954,7 @@ Widget _required(
 );
 Widget _monthDropdown(int? value, ValueChanged<int?> changed) =>
     DropdownButtonFormField<int?>(
-      initialValue: value,
+      value: value,
       decoration: const InputDecoration(labelText: 'Month'),
       items: [
         const DropdownMenuItem(value: null, child: Text('All months')),
@@ -1968,7 +1968,7 @@ Widget _monthDropdown(int? value, ValueChanged<int?> changed) =>
     );
 Widget _yearDropdown(int? value, ValueChanged<int?> changed) =>
     DropdownButtonFormField<int?>(
-      initialValue: value,
+      value: value,
       decoration: const InputDecoration(labelText: 'Year'),
       items: [
         const DropdownMenuItem(value: null, child: Text('All years')),

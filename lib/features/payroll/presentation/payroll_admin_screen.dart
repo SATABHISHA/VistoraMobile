@@ -117,7 +117,7 @@ class _PayrollAdminScreenState extends ConsumerState<PayrollAdminScreen> {
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<int>(
-                      initialValue: month,
+                      value: month,
                       decoration: const InputDecoration(labelText: 'Month'),
                       items: List.generate(
                         12,
@@ -137,7 +137,7 @@ class _PayrollAdminScreenState extends ConsumerState<PayrollAdminScreen> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: DropdownButtonFormField<int>(
-                      initialValue: year,
+                      value: year,
                       decoration: const InputDecoration(labelText: 'Year'),
                       items: List.generate(
                         5,
@@ -1098,7 +1098,7 @@ class _PayrollEmployeeSheetState extends State<_PayrollEmployeeSheet> {
               children: [
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    initialValue: item.type,
+                    value: item.type,
                     decoration: const InputDecoration(labelText: 'Type'),
                     items: const [
                       DropdownMenuItem(

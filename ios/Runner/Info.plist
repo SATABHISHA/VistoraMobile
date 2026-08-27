@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Vistora Mobile</string>
+	<string>Vistora</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -29,8 +29,18 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_dartobservatory._tcp</string>
+	</array>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Allow Flutter debugging tools to connect to Vistora Mobile on the local network.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Vistora uses location only for attendance geofence validation when you clock in or clock out.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Vistora uses your location when you clock in or clock out to validate the company attendance geofence.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Vistora lets you choose photos or images when uploading approved employee, billing, or document files.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

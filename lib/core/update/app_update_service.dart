@@ -39,6 +39,23 @@ class AppUpdateManifest {
   }
 }
 
+class AppStoreLookupResult {
+  const AppStoreLookupResult({
+    required this.version,
+    required this.trackViewUrl,
+  });
+
+  final String version;
+  final String trackViewUrl;
+
+  factory AppStoreLookupResult.fromJson(Map<String, dynamic> json) {
+    return AppStoreLookupResult(
+      version: json['version']?.toString() ?? '',
+      trackViewUrl: json['trackViewUrl']?.toString() ?? '',
+    );
+  }
+}
+
 class AppUpdateState {
   const AppUpdateState({
     required this.current,
@@ -70,6 +87,10 @@ class AppUpdateService {
   static const manifestUrl = String.fromEnvironment('UPDATE_MANIFEST_URL');
   static const androidStoreUrl = String.fromEnvironment('ANDROID_STORE_URL');
   static const iosStoreUrl = String.fromEnvironment('IOS_STORE_URL');
+  static const appStoreCountry = String.fromEnvironment(
+    'APP_STORE_COUNTRY',
+    defaultValue: 'in',
+  );
 
   Future<AppUpdateState> check() async {
     final current = await PackageInfo.fromPlatform();
@@ -82,6 +103,9 @@ class AppUpdateService {
       } catch (_) {
         // A failed release manifest must not lock users out of the app.
       }
+    }
+    if (Platform.isIOS && manifest == null) {
+      manifest = await _checkIosAppStore(current);
     }
     var playUpdateAvailable = false;
     if (Platform.isAndroid && manifest == null) {
@@ -98,6 +122,37 @@ class AppUpdateService {
       manifest: manifest,
       playUpdateAvailable: playUpdateAvailable,
     );
+  }
+
+  Future<AppUpdateManifest?> _checkIosAppStore(PackageInfo current) async {
+    try {
+      final bundleId = current.packageName.trim();
+      if (bundleId.isEmpty) return null;
+      final response = await _dio.getUri<Map<String, dynamic>>(
+        Uri.https('itunes.apple.com', '/lookup', {
+          'bundleId': bundleId,
+          'country': appStoreCountry,
+        }),
+      );
+      final data = response.data;
+      final results = data?['results'];
+      if (results is! List || results.isEmpty) return null;
+      final first = results.first;
+      if (first is! Map<String, dynamic>) return null;
+      final appStore = AppStoreLookupResult.fromJson(first);
+      if (appStore.version.trim().isEmpty) return null;
+      return AppUpdateManifest(
+        latestVersion: appStore.version,
+        forceUpdate: false,
+        message: 'A newer version of Vistora is available on the App Store.',
+        iosUrl: appStore.trackViewUrl.isEmpty
+            ? iosStoreUrl
+            : appStore.trackViewUrl,
+      );
+    } catch (_) {
+      // App Store metadata may be unavailable before first approval or by region.
+      return null;
+    }
   }
 
   Future<bool> tryAndroidPlayUpdate() async {

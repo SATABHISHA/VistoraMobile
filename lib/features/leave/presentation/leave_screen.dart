@@ -421,7 +421,7 @@ class _ApplyLeaveSheetState extends ConsumerState<_ApplyLeaveSheet> {
             ),
             const SizedBox(height: 18),
             DropdownButtonFormField<int>(
-              initialValue: _typeId,
+              value: _typeId,
               decoration: const InputDecoration(labelText: 'Leave type'),
               items: widget.types
                   .map(

@@ -104,38 +104,10 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
 
   Future<void> _regularize(AttendanceDay day) async {
     if (day.id == null) return;
-    final controller = TextEditingController();
     final reason = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Request regularization'),
-        content: TextField(
-          controller: controller,
-          minLines: 3,
-          maxLines: 5,
-          maxLength: 500,
-          autofocus: true,
-          decoration: const InputDecoration(
-            labelText: 'Reason',
-            hintText: 'Explain what needs to be corrected',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final value = controller.text.trim();
-              if (value.isNotEmpty) Navigator.pop(context, value);
-            },
-            child: const Text('Submit'),
-          ),
-        ],
-      ),
+      builder: (context) => const _RegularizationDialog(),
     );
-    controller.dispose();
     if (reason == null || !mounted) return;
     try {
       await ref
@@ -221,6 +193,55 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _RegularizationDialog extends StatefulWidget {
+  const _RegularizationDialog();
+
+  @override
+  State<_RegularizationDialog> createState() => _RegularizationDialogState();
+}
+
+class _RegularizationDialogState extends State<_RegularizationDialog> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final value = _controller.text.trim();
+    if (value.isNotEmpty) Navigator.pop(context, value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Request regularization'),
+      content: TextField(
+        controller: _controller,
+        minLines: 3,
+        maxLines: 5,
+        maxLength: 500,
+        autofocus: true,
+        textInputAction: TextInputAction.done,
+        onSubmitted: (_) => _submit(),
+        decoration: const InputDecoration(
+          labelText: 'Reason',
+          hintText: 'Explain what needs to be corrected',
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(onPressed: _submit, child: const Text('Submit')),
+      ],
     );
   }
 }

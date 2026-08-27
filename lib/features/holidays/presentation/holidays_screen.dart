@@ -269,7 +269,7 @@ class _HolidaySheetState extends ConsumerState<_HolidaySheet> {
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
-            initialValue: type,
+            value: type,
             decoration: const InputDecoration(labelText: 'Type'),
             items: const ['National', 'Restricted', 'Company']
                 .map(

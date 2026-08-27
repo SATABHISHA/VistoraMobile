@@ -69,7 +69,7 @@ class _PayslipsScreenState extends ConsumerState<PayslipsScreen> {
                 ],
               ),
               DropdownButtonFormField<int?>(
-                initialValue: _month,
+                value: _month,
                 decoration: const InputDecoration(labelText: 'Month'),
                 items: [
                   const DropdownMenuItem<int?>(
@@ -280,7 +280,7 @@ class _AdminPayslipsViewState extends ConsumerState<_AdminPayslipsView> {
             children: [
               Expanded(
                 child: DropdownButtonFormField<int>(
-                  initialValue: _month,
+                  value: _month,
                   decoration: const InputDecoration(labelText: 'Month'),
                   items: List.generate(
                     12,
@@ -301,7 +301,7 @@ class _AdminPayslipsViewState extends ConsumerState<_AdminPayslipsView> {
               SizedBox(
                 width: constraints.maxWidth < 460 ? 118 : 150,
                 child: DropdownButtonFormField<int>(
-                  initialValue: _year,
+                  value: _year,
                   decoration: const InputDecoration(labelText: 'Year'),
                   items: List.generate(
                     6,

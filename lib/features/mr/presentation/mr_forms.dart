@@ -322,7 +322,7 @@ class _DoctorEditorState extends ConsumerState<_DoctorEditor> {
                   decoration: const InputDecoration(labelText: 'Email'),
                 ),
                 DropdownButtonFormField<String>(
-                  initialValue: _status,
+                  value: _status,
                   decoration: const InputDecoration(labelText: 'Status'),
                   items: const [
                     DropdownMenuItem(value: 'active', child: Text('Active')),
@@ -622,7 +622,7 @@ class _LocationEditorState extends ConsumerState<_LocationEditor> {
                   onChanged: (value) => setState(() => _businessUnitId = value),
                 ),
                 DropdownButtonFormField<String>(
-                  initialValue: _status,
+                  value: _status,
                   decoration: const InputDecoration(labelText: 'Status'),
                   items: const [
                     DropdownMenuItem(value: 'active', child: Text('Active')),
@@ -904,7 +904,7 @@ class _AssignmentEditorState extends ConsumerState<_AssignmentEditor> {
               ),
               const SizedBox(height: 14),
               DropdownButtonFormField<int>(
-                initialValue:
+                value:
                     mappedLocations.any((item) => item.id == _locationId)
                     ? _locationId
                     : null,
@@ -1397,7 +1397,7 @@ Widget _optionDropdown({
   required List<MrOption> options,
   required ValueChanged<int?> onChanged,
 }) => DropdownButtonFormField<int>(
-  initialValue: options.any((item) => item.id == value) ? value : null,
+  value: options.any((item) => item.id == value) ? value : null,
   decoration: InputDecoration(labelText: label),
   isExpanded: true,
   items: options

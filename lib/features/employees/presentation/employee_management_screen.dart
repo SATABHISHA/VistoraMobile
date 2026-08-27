@@ -127,7 +127,7 @@ class _EmployeeManagementScreenState
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  initialValue: role,
+                  value: role,
                   decoration: const InputDecoration(labelText: 'Role'),
                   items: const [
                     DropdownMenuItem(
@@ -344,7 +344,7 @@ class _EmployeeManagementScreenState
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                initialValue: _status,
+                value: _status,
                 decoration: const InputDecoration(labelText: 'Status'),
                 items: const [
                   DropdownMenuItem(value: 'all', child: Text('All employees')),
