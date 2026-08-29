@@ -726,7 +726,7 @@ class PayslipSheet extends StatelessWidget {
         _section(context, 'Salary breakup'),
         const SizedBox(height: 10),
         if (item.components.isNotEmpty)
-          _componentTable(item.components)
+          _componentBreakup(item)
         else
           const Text(
             'No salary component breakup was recorded for this payslip.',
@@ -861,31 +861,129 @@ class PayslipSheet extends StatelessWidget {
     ),
   );
 
-  static Widget _componentTable(List<PayslipComponent> components) =>
-      SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: DataTable(
-          headingRowColor: WidgetStatePropertyAll(
-            VistoraColors.cyan.withValues(alpha: .08),
+  static Widget _componentBreakup(Payslip payslip) {
+    const types = ['Earning', 'Deduction', 'Reimbursement'];
+    return Column(
+      children: [
+        for (final type in types)
+          if (payslip.components.where((item) => item.type == type).isNotEmpty)
+            _componentTable(
+              payslip.components.where((item) => item.type == type).toList(),
+              title: type,
+            ),
+        const SizedBox(height: 10),
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                VistoraColors.green.withValues(alpha: .13),
+                VistoraColors.orange.withValues(alpha: .10),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: VistoraColors.green.withValues(alpha: .25),
+            ),
           ),
-          columns: const [
-            DataColumn(label: Text('Component')),
-            DataColumn(label: Text('Type')),
-            DataColumn(label: Text('Monthly'), numeric: true),
-          ],
-          rows: components
-              .map(
-                (item) => DataRow(
-                  cells: [
-                    DataCell(Text(item.name)),
-                    DataCell(Text(item.type)),
-                    DataCell(Text(_money(item.amount))),
-                  ],
+          child: Row(
+            children: [
+              Expanded(
+                child: _summaryAmount(
+                  'Gross salary',
+                  _money(payslip.grossAmount),
+                  VistoraColors.green,
                 ),
-              )
-              .toList(),
+              ),
+              Container(width: 1, height: 34, color: VistoraColors.muted),
+              Expanded(
+                child: _summaryAmount(
+                  'Net payable',
+                  _money(payslip.netPayable),
+                  VistoraColors.orange,
+                  alignEnd: true,
+                ),
+              ),
+            ],
+          ),
         ),
-      );
+      ],
+    );
+  }
+
+  static Widget _summaryAmount(
+    String label,
+    String amount,
+    Color color, {
+    bool alignEnd = false,
+  }) => Column(
+    crossAxisAlignment: alignEnd
+        ? CrossAxisAlignment.end
+        : CrossAxisAlignment.start,
+    children: [
+      Text(
+        label,
+        style: const TextStyle(color: VistoraColors.muted, fontSize: 11),
+      ),
+      const SizedBox(height: 3),
+      Text(
+        amount,
+        style: TextStyle(
+          color: color,
+          fontWeight: FontWeight.w900,
+          fontSize: 17,
+        ),
+      ),
+    ],
+  );
+
+  static Widget _componentTable(
+    List<PayslipComponent> components, {
+    required String title,
+  }) => Padding(
+    padding: const EdgeInsets.only(bottom: 10),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title.toUpperCase(),
+          style: TextStyle(
+            color: title == 'Deduction'
+                ? VistoraColors.pink
+                : title == 'Reimbursement'
+                ? VistoraColors.amber
+                : VistoraColors.green,
+            fontWeight: FontWeight.w900,
+            fontSize: 12,
+            letterSpacing: .7,
+          ),
+        ),
+        const SizedBox(height: 5),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: DataTable(
+            headingRowColor: WidgetStatePropertyAll(
+              VistoraColors.cyan.withValues(alpha: .08),
+            ),
+            columns: const [
+              DataColumn(label: Text('Component')),
+              DataColumn(label: Text('Monthly'), numeric: true),
+            ],
+            rows: components
+                .map(
+                  (item) => DataRow(
+                    cells: [
+                      DataCell(Text(item.name)),
+                      DataCell(Text(_money(item.amount))),
+                    ],
+                  ),
+                )
+                .toList(),
+          ),
+        ),
+      ],
+    ),
+  );
 
   static Widget _leaveTable(List<PayslipLeaveBalance> balances) =>
       SingleChildScrollView(
