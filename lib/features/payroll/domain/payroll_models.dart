@@ -41,6 +41,7 @@ class PayrollEmployeeSummary {
     required this.employeeCode,
     this.employeeEmail,
     this.employeeMobile,
+    this.designation,
     required this.status,
     required this.baseAmount,
     required this.grossAmount,
@@ -67,6 +68,7 @@ class PayrollEmployeeSummary {
   final String employeeCode;
   final String? employeeEmail;
   final String? employeeMobile;
+  final String? designation;
   final String status;
   final double baseAmount;
   final double grossAmount;
@@ -99,6 +101,9 @@ class PayrollEmployeeSummary {
       status: json['status']?.toString() ?? 'draft',
       employeeEmail: employee['work_email']?.toString(),
       employeeMobile: employee['mobile']?.toString(),
+      designation:
+          snapshot['designation']?.toString() ??
+          asMap(employee['designation'])['name']?.toString(),
       baseAmount: asDouble(json['base_amount']),
       grossAmount: asDouble(json['gross_amount']),
       statutoryDeduction: asDouble(json['statutory_deduction_amount']),

@@ -17,6 +17,7 @@ class Payslip {
     required this.netPayable,
     this.employeeEmail,
     this.employeeMobile,
+    this.designation,
     this.releasedAt,
     this.generatedAt,
     this.deductionDays = 0,
@@ -38,6 +39,7 @@ class Payslip {
   final String employeeCode;
   final String? employeeEmail;
   final String? employeeMobile;
+  final String? designation;
   final double grossAmount;
   final double baseAmount;
   final double statutoryDeduction;
@@ -77,6 +79,9 @@ class Payslip {
       employeeCode: employee['emp_code']?.toString() ?? '—',
       employeeEmail: asNullableString(employee['work_email']),
       employeeMobile: asNullableString(employee['mobile']),
+      designation:
+          asNullableString(snapshot['designation']) ??
+          asNullableString(asMap(employee['designation'])['name']),
       grossAmount: asDouble(payroll['gross_amount']),
       baseAmount: asDouble(payroll['base_amount']),
       statutoryDeduction: asDouble(payroll['statutory_deduction_amount']),
@@ -117,6 +122,7 @@ class Payslip {
     employeeCode: employee.employeeCode,
     employeeEmail: employee.employeeEmail,
     employeeMobile: employee.employeeMobile,
+    designation: employee.designation,
     grossAmount: employee.grossAmount,
     baseAmount: employee.baseAmount,
     statutoryDeduction: employee.statutoryDeduction,

@@ -14,16 +14,6 @@ Future<Uint8List> buildPayslipPdf({
     author: companyName,
   );
   final money = NumberFormat.currency(locale: 'en_IN', symbol: 'INR ');
-  final earnings = payslip.components
-      .where((item) => item.type != 'Deduction')
-      .toList();
-  final deductions = payslip.components
-      .where((item) => item.type == 'Deduction')
-      .toList();
-  final componentNames = <String>{
-    ...earnings.map((item) => item.name),
-    ...deductions.map((item) => item.name),
-  };
 
   document.addPage(
     pw.MultiPage(
@@ -110,18 +100,24 @@ Future<Uint8List> buildPayslipPdf({
                 payslip.employeeCode,
               ),
               _infoRow(
+                'Designation',
+                payslip.designation ?? 'Not specified',
+                'Payroll Period',
+                payslip.periodLabel,
+              ),
+              _infoRow(
                 'Email',
                 payslip.employeeEmail ?? 'Not available',
                 'Mobile',
                 payslip.employeeMobile ?? 'Not available',
               ),
               _infoRow(
-                'Payroll Period',
-                payslip.periodLabel,
                 'Released On',
                 payslip.releasedAt == null
                     ? 'Not available'
                     : DateFormat.yMMMd().format(payslip.releasedAt!),
+                'Status',
+                'Released',
               ),
             ],
           ),
@@ -129,13 +125,13 @@ Future<Uint8List> buildPayslipPdf({
         pw.SizedBox(height: 20),
         _sectionTitle('Salary breakup'),
         pw.SizedBox(height: 8),
-        if (componentNames.isNotEmpty)
+        if (payslip.components.isNotEmpty)
           pw.Table(
             border: pw.TableBorder.all(color: PdfColor.fromHex('#E2E8F0')),
             columnWidths: const {
               0: pw.FlexColumnWidth(2.2),
-              1: pw.FlexColumnWidth(),
-              2: pw.FlexColumnWidth(),
+              1: pw.FlexColumnWidth(1.2),
+              2: pw.FlexColumnWidth(1.2),
             },
             children: [
               pw.TableRow(
@@ -144,28 +140,17 @@ Future<Uint8List> buildPayslipPdf({
                 ),
                 children: [
                   _tableCell('COMPONENT', header: true),
-                  _tableCell('EARNINGS', header: true, alignRight: true),
-                  _tableCell('DEDUCTIONS', header: true, alignRight: true),
+                  _tableCell('TYPE', header: true),
+                  _tableCell('MONTHLY', header: true, alignRight: true),
                 ],
               ),
-              for (final name in componentNames)
+              for (final component in payslip.components)
                 pw.TableRow(
                   children: [
-                    _tableCell(name),
+                    _tableCell(component.name),
+                    _tableCell(component.type),
                     _tableCell(
-                      money.format(
-                        earnings
-                            .where((item) => item.name == name)
-                            .fold<double>(0, (sum, item) => sum + item.amount),
-                      ),
-                      alignRight: true,
-                    ),
-                    _tableCell(
-                      money.format(
-                        deductions
-                            .where((item) => item.name == name)
-                            .fold<double>(0, (sum, item) => sum + item.amount),
-                      ),
+                      money.format(component.amount),
                       alignRight: true,
                     ),
                   ],

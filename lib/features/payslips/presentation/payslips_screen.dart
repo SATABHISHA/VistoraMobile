@@ -717,13 +717,21 @@ class PayslipSheet extends StatelessWidget {
         const Divider(height: 30),
         _detail('Employee', item.employeeName),
         _detail('Employee code', item.employeeCode),
+        if (item.designation != null && item.designation!.isNotEmpty)
+          _detail('Designation', item.designation!),
         if (item.employeeEmail != null) _detail('Email', item.employeeEmail!),
         if (item.employeeMobile != null)
           _detail('Mobile', item.employeeMobile!),
         const SizedBox(height: 20),
         _section(context, 'Salary breakup'),
         const SizedBox(height: 10),
-        if (item.components.isNotEmpty) _componentTable(item.components),
+        if (item.components.isNotEmpty)
+          _componentTable(item.components)
+        else
+          const Text(
+            'No salary component breakup was recorded for this payslip.',
+            style: TextStyle(color: VistoraColors.muted),
+          ),
         _detail('Gross monthly', _money(item.grossAmount)),
         _detail('Statutory deductions', '- ${_money(item.statutoryDeduction)}'),
         _detail('Net salary before attendance', _money(item.baseAmount)),
