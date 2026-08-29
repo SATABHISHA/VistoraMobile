@@ -106,18 +106,24 @@ Future<Uint8List> buildPayslipPdf({
                 payslip.periodLabel,
               ),
               _infoRow(
+                'Department',
+                payslip.department ?? 'Not specified',
                 'Email',
                 payslip.employeeEmail ?? 'Not available',
-                'Mobile',
-                payslip.employeeMobile ?? 'Not available',
               ),
               _infoRow(
+                'Mobile',
+                payslip.employeeMobile ?? 'Not available',
                 'Released On',
                 payslip.releasedAt == null
                     ? 'Not available'
                     : DateFormat.yMMMd().format(payslip.releasedAt!),
+              ),
+              _infoRow(
                 'Status',
                 'Released',
+                '',
+                '',
               ),
             ],
           ),

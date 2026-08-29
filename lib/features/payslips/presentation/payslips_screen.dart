@@ -719,6 +719,8 @@ class PayslipSheet extends StatelessWidget {
         _detail('Employee code', item.employeeCode),
         if (item.designation != null && item.designation!.isNotEmpty)
           _detail('Designation', item.designation!),
+        if (item.department != null && item.department!.isNotEmpty)
+          _detail('Department', item.department!),
         if (item.employeeEmail != null) _detail('Email', item.employeeEmail!),
         if (item.employeeMobile != null)
           _detail('Mobile', item.employeeMobile!),

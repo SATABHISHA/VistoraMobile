@@ -18,6 +18,7 @@ class Payslip {
     this.employeeEmail,
     this.employeeMobile,
     this.designation,
+    this.department,
     this.releasedAt,
     this.generatedAt,
     this.deductionDays = 0,
@@ -40,6 +41,7 @@ class Payslip {
   final String? employeeEmail;
   final String? employeeMobile;
   final String? designation;
+  final String? department;
   final double grossAmount;
   final double baseAmount;
   final double statutoryDeduction;
@@ -82,6 +84,9 @@ class Payslip {
       designation:
           asNullableString(snapshot['designation']) ??
           asNullableString(asMap(employee['designation'])['name']),
+      department:
+          asNullableString(snapshot['department']) ??
+          asNullableString(asMap(employee['department'])['name']),
       grossAmount: asDouble(payroll['gross_amount']),
       baseAmount: asDouble(payroll['base_amount']),
       statutoryDeduction: asDouble(payroll['statutory_deduction_amount']),
@@ -123,6 +128,7 @@ class Payslip {
     employeeEmail: employee.employeeEmail,
     employeeMobile: employee.employeeMobile,
     designation: employee.designation,
+    department: employee.department,
     grossAmount: employee.grossAmount,
     baseAmount: employee.baseAmount,
     statutoryDeduction: employee.statutoryDeduction,
