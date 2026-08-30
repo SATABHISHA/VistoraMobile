@@ -467,6 +467,13 @@ class DashboardScreen extends ConsumerWidget {
           VistoraColors.green,
           '/mr',
         ),
+      if (session.features.financeHub && session.user.isCompanyManager)
+        const _Module(
+          'Finance Hub',
+          Icons.insights_outlined,
+          VistoraColors.cyan,
+          '/finance-hub',
+        ),
       if (session.user.isCompanyManager)
         const _Module(
           'HR Workspace',

@@ -29,6 +29,7 @@ class PlatformTenant {
     required this.mrEnabled,
     required this.projectsEnabled,
     required this.fileManagerEnabled,
+    required this.financeHubEnabled,
     this.gstin,
     this.phone,
     this.registeredAddress,
@@ -47,6 +48,7 @@ class PlatformTenant {
   final bool mrEnabled;
   final bool projectsEnabled;
   final bool fileManagerEnabled;
+  final bool financeHubEnabled;
   final String? gstin;
   final String? phone;
   final String? registeredAddress;
@@ -69,6 +71,9 @@ class PlatformTenant {
     fileManagerEnabled:
         json['file_manager_enabled'] == true ||
         asInt(json['file_manager_enabled']) == 1,
+    financeHubEnabled:
+        json['finance_hub_enabled'] == true ||
+        asInt(json['finance_hub_enabled']) == 1,
     gstin: asNullableString(json['gstin']),
     phone: asNullableString(json['phone']),
     registeredAddress: asNullableString(json['registered_address']),

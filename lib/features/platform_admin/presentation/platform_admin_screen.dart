@@ -1014,6 +1014,13 @@ class _TenantCard extends StatelessWidget {
                     ? null
                     : (value) => onFeature('file_manager_enabled', value),
               ),
+              FilterChip(
+                selected: tenant.financeHubEnabled,
+                label: const Text('Finance Hub'),
+                onSelected: busy
+                    ? null
+                    : (value) => onFeature('finance_hub_enabled', value),
+              ),
               ActionChip(
                 avatar: Icon(
                   tenant.status == 'active' ? Icons.pause : Icons.play_arrow,

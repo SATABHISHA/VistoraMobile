@@ -15,7 +15,12 @@ void main() {
         'employee': {'id': 19, 'emp_code': 'EMP019'},
         'tenant': {'company_name': 'Ahanova'},
         'permissions': ['attendance.manage'],
-        'features': {'mr': true, 'projects': true, 'geofence': false},
+        'features': {
+          'mr': true,
+          'projects': true,
+          'finance_hub': true,
+          'geofence': false,
+        },
       },
     });
 
@@ -25,5 +30,6 @@ void main() {
     expect(session.hasPermission('attendance.manage'), isTrue);
     expect(session.features.mr, isTrue);
     expect(session.features.fileManager, isFalse);
+    expect(session.features.financeHub, isTrue);
   });
 }

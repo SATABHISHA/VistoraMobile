@@ -5,12 +5,14 @@ class TenantFeatures {
     this.fileManager = false,
     this.mr = false,
     this.projects = false,
+    this.financeHub = false,
     this.geofence = false,
   });
 
   final bool fileManager;
   final bool mr;
   final bool projects;
+  final bool financeHub;
   final bool geofence;
 
   factory TenantFeatures.fromJson(Map<String, dynamic>? json) {
@@ -18,6 +20,7 @@ class TenantFeatures {
       fileManager: json?['file_manager'] == true,
       mr: json?['mr'] == true,
       projects: json?['projects'] == true,
+      financeHub: json?['finance_hub'] == true,
       geofence: json?['geofence'] == true,
     );
   }

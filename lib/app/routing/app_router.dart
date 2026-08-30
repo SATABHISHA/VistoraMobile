@@ -12,6 +12,7 @@ import 'package:vistora_mobile/features/auth/presentation/splash_screen.dart';
 import 'package:vistora_mobile/features/dashboard/presentation/dashboard_screen.dart';
 import 'package:vistora_mobile/features/employees/presentation/employee_management_screen.dart';
 import 'package:vistora_mobile/features/file_manager/presentation/file_manager_screen.dart';
+import 'package:vistora_mobile/features/finance_hub/presentation/finance_hub_screen.dart';
 import 'package:vistora_mobile/features/leave/presentation/leave_screen.dart';
 import 'package:vistora_mobile/features/holidays/presentation/holidays_screen.dart';
 import 'package:vistora_mobile/features/hr_operations/presentation/hr_operations_screen.dart';
@@ -61,6 +62,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       if (auth.status == AuthStatus.authenticated &&
           path == '/mr' &&
           auth.session?.features.mr != true) {
+        return '/dashboard';
+      }
+      if (auth.status == AuthStatus.authenticated &&
+          path == '/finance-hub' &&
+          (auth.session?.features.financeHub != true ||
+              !const {
+                'admin',
+                'hr',
+              }.contains(auth.session?.user.normalizedRole))) {
         return '/dashboard';
       }
       if (auth.status == AuthStatus.authenticated &&
@@ -191,6 +201,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const TaxInvoicesScreen(),
           ),
           GoRoute(path: '/mr', builder: (context, state) => const MrScreen()),
+          GoRoute(
+            path: '/finance-hub',
+            builder: (context, state) => const FinanceHubScreen(),
+          ),
           GoRoute(
             path: '/platform',
             builder: (context, state) => const PlatformAdminScreen(),
