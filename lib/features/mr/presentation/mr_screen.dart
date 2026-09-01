@@ -1583,6 +1583,8 @@ class _RecordCard extends StatelessWidget {
                   children: [
                     Text(
                       title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontSize: 17,
                         fontWeight: FontWeight.w900,
@@ -1596,9 +1598,15 @@ class _RecordCard extends StatelessWidget {
                   ],
                 ),
               ),
-              if ((status ?? '').isNotEmpty) _StatusPill(status!),
             ],
           ),
+          if ((status ?? '').isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerRight,
+              child: _StatusPill(status!),
+            ),
+          ],
           const Divider(height: 24),
           content,
           if (actions.isNotEmpty) ...[
@@ -1632,6 +1640,9 @@ class _StatusPill extends StatelessWidget {
       ),
       child: Text(
         _label(status),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        textAlign: TextAlign.center,
         style: TextStyle(
           color: color,
           fontSize: 11,
