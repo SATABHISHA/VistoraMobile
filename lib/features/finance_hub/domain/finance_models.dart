@@ -7,24 +7,34 @@ class FinanceComponent {
     required this.unitPrice,
     this.hsnSac,
     this.amount = 0,
+    this.gstIncluded = false,
+    this.taxableAmount = 0,
+    this.taxAmount = 0,
   });
   final String description;
   final String? hsnSac;
   final double quantity;
   final double unitPrice;
   final double amount;
+  final bool gstIncluded;
+  final double taxableAmount;
+  final double taxAmount;
   factory FinanceComponent.fromJson(Map<String, dynamic> j) => FinanceComponent(
     description: j['description']?.toString() ?? '',
     hsnSac: asNullableString(j['hsn_sac']),
     quantity: asDouble(j['quantity']),
     unitPrice: asDouble(j['unit_price']),
     amount: asDouble(j['amount']),
+    gstIncluded: j['gst_included'] == true || asInt(j['gst_included']) == 1,
+    taxableAmount: asDouble(j['taxable_amount']),
+    taxAmount: asDouble(j['tax_amount']),
   );
   Map<String, dynamic> toJson() => {
     'description': description,
     'hsn_sac': hsnSac,
     'quantity': quantity,
     'unit_price': unitPrice,
+    'gst_included': gstIncluded,
   };
 }
 

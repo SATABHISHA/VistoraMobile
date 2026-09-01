@@ -139,7 +139,7 @@ class _FinanceHubScreenState extends ConsumerState<FinanceHubScreen>
           Tab(icon: Icon(Icons.insights_outlined), text: 'Overview'),
           Tab(icon: Icon(Icons.call_received), text: 'Income'),
           Tab(icon: Icon(Icons.call_made), text: 'Expenses'),
-          Tab(icon: Icon(Icons.credit_card), text: 'Credit Card Bill Payments'),
+          Tab(icon: Icon(Icons.credit_card), text: 'Credit Card Payments'),
           Tab(icon: Icon(Icons.tune), text: 'Settings'),
           Tab(icon: Icon(Icons.history), text: 'Audit'),
         ],
@@ -520,7 +520,7 @@ class _FinanceHubScreenState extends ConsumerState<FinanceHubScreen>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'Credit Card Bill Payments',
+                          'Credit Card Payments',
                           style: TextStyle(color: Color(0xffd8d0ff)),
                         ),
                         Text(
@@ -565,7 +565,7 @@ class _FinanceHubScreenState extends ConsumerState<FinanceHubScreen>
           if (entries.isEmpty)
             const Padding(
               padding: EdgeInsets.all(54),
-              child: Center(child: Text('No credit card bill payments found.')),
+              child: Center(child: Text('No credit card payments found.')),
             )
           else
             for (final entry in entries) _creditCardTile(entry),
@@ -646,6 +646,22 @@ class _FinanceHubScreenState extends ConsumerState<FinanceHubScreen>
                   e.cardHolderName!,
                   style: const TextStyle(color: Color(0xffb8a8ff)),
                 ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                children: [
+                  ActionChip(
+                    avatar: const Icon(Icons.visibility_outlined, size: 17),
+                    label: const Text('View'),
+                    onPressed: () => _viewEntry(e),
+                  ),
+                  ActionChip(
+                    avatar: const Icon(Icons.edit_outlined, size: 17),
+                    label: const Text('Edit'),
+                    onPressed: () => _edit(e),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
@@ -740,6 +756,11 @@ class _FinanceHubScreenState extends ConsumerState<FinanceHubScreen>
                     onPressed: () => _generate(e),
                   ),
                 ActionChip(
+                  avatar: const Icon(Icons.visibility_outlined, size: 17),
+                  label: const Text('View details'),
+                  onPressed: () => _viewEntry(e),
+                ),
+                ActionChip(
                   label: const Text('Delete'),
                   onPressed: () => _delete(e),
                 ),
@@ -750,6 +771,147 @@ class _FinanceHubScreenState extends ConsumerState<FinanceHubScreen>
       ),
     ),
   );
+
+  Future<void> _viewEntry(FinanceEntry e) => showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    backgroundColor: VistoraColors.surface,
+    builder: (context) => DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: .72,
+      maxChildSize: .94,
+      builder: (_, controller) => ListView(
+        controller: controller,
+        padding: const EdgeInsets.all(20),
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: const Color(0xffff7a3d).withValues(alpha: .16),
+                child: Icon(
+                  e.paymentMode == 'card'
+                      ? Icons.credit_card
+                      : e.type == 'income'
+                      ? Icons.south_west
+                      : Icons.north_east,
+                  color: VistoraColors.orange,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      e.category,
+                      style: const TextStyle(
+                        fontSize: 23,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    Text(
+                      '${DateFormat.yMMMd().format(e.date)} • ${e.partyName ?? 'No party'}',
+                      style: const TextStyle(color: VistoraColors.muted),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Card(
+            color: const Color(0xff171b31),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Wrap(
+                spacing: 24,
+                runSpacing: 14,
+                children: [
+                  _detailMetric('Taxable value', cash(e.subtotal)),
+                  _detailMetric(
+                    'GST',
+                    cash(e.cgstAmount + e.sgstAmount + e.igstAmount),
+                  ),
+                  _detailMetric('Grand total', cash(e.total), accent: true),
+                  _detailMetric(
+                    'Payment mode',
+                    e.paymentMode.replaceAll('_', ' '),
+                  ),
+                  if (e.referenceNo != null)
+                    _detailMetric('Reference', e.referenceNo!),
+                  if (e.bankName != null) _detailMetric('Bank', e.bankName!),
+                ],
+              ),
+            ),
+          ),
+          if (e.gstType != 'none') ...[
+            const SizedBox(height: 10),
+            Text(
+              e.gstType == 'igst'
+                  ? 'IGST ${e.igstPercent}%: ${cash(e.igstAmount)}'
+                  : 'CGST ${e.cgstPercent}%: ${cash(e.cgstAmount)}  •  SGST ${e.sgstPercent}%: ${cash(e.sgstAmount)}',
+              style: const TextStyle(
+                color: Color(0xff70ddff),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+          const SizedBox(height: 20),
+          const Text(
+            'Components',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 8),
+          for (final component in e.components)
+            Card(
+              child: ListTile(
+                title: Text(component.description),
+                subtitle: Text(
+                  '${component.quantity} × ${cash(component.unitPrice)}\n'
+                  '${component.gstIncluded ? 'GST included' : 'GST added'} • Taxable ${cash(component.taxableAmount)} • GST ${cash(component.taxAmount)}',
+                ),
+                trailing: Text(
+                  cash(component.amount),
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+              ),
+            ),
+          if (e.description != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              e.description!,
+              style: const TextStyle(color: VistoraColors.muted),
+            ),
+          ],
+        ],
+      ),
+    ),
+  );
+
+  Widget _detailMetric(String label, String value, {bool accent = false}) =>
+      SizedBox(
+        width: 145,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: const TextStyle(color: VistoraColors.muted)),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: accent ? 19 : 15,
+                fontWeight: FontWeight.w900,
+                color: accent ? VistoraColors.green : null,
+              ),
+            ),
+          ],
+        ),
+      );
+
   Future<void> _edit([FinanceEntry? entry]) async {
     type = tabs.index == 2 || tabs.index == 3 ? 'expense' : 'income';
     final changed = await showModalBottomSheet<bool>(
@@ -966,6 +1128,7 @@ class _FinanceEntrySheetState extends State<_FinanceEntrySheet> {
       cardLastFour = TextEditingController(),
       description = TextEditingController();
   final components = <List<TextEditingController>>[];
+  final componentGstIncluded = <bool>[];
   @override
   void initState() {
     super.initState();
@@ -994,12 +1157,46 @@ class _FinanceEntrySheetState extends State<_FinanceEntrySheet> {
     }
   }
 
-  void _add([FinanceComponent? c]) => components.add([
-    TextEditingController(text: c?.description),
-    TextEditingController(text: c?.hsnSac),
-    TextEditingController(text: '${c?.quantity ?? 1}'),
-    TextEditingController(text: c == null ? '' : '${c.unitPrice}'),
-  ]);
+  void _add([FinanceComponent? c]) {
+    components.add([
+      TextEditingController(text: c?.description),
+      TextEditingController(text: c?.hsnSac),
+      TextEditingController(text: '${c?.quantity ?? 1}'),
+      TextEditingController(text: c == null ? '' : '${c.unitPrice}'),
+    ]);
+    componentGstIncluded.add(c?.gstIncluded ?? false);
+  }
+
+  double get _gstRate => gst == 'igst'
+      ? widget.settings.igst
+      : gst == 'cgst_sgst'
+      ? widget.settings.cgst + widget.settings.sgst
+      : 0;
+
+  ({double taxable, double tax, double total}) _componentAmounts(int index) {
+    final qty = double.tryParse(components[index][2].text) ?? 0;
+    final unitPrice = double.tryParse(components[index][3].text) ?? 0;
+    final entered = qty * unitPrice;
+    if (_gstRate <= 0) return (taxable: entered, tax: 0, total: entered);
+    if (componentGstIncluded[index]) {
+      final taxable = entered / (1 + (_gstRate / 100));
+      return (taxable: taxable, tax: entered - taxable, total: entered);
+    }
+    final tax = entered * _gstRate / 100;
+    return (taxable: entered, tax: tax, total: entered + tax);
+  }
+
+  ({double taxable, double tax, double total}) get _entryAmounts {
+    double taxable = 0, tax = 0, total = 0;
+    for (var i = 0; i < components.length; i++) {
+      final value = _componentAmounts(i);
+      taxable += value.taxable;
+      tax += value.tax;
+      total += value.total;
+    }
+    return (taxable: taxable, tax: tax, total: total);
+  }
+
   @override
   Widget build(BuildContext context) => Padding(
     padding: EdgeInsets.only(
@@ -1203,6 +1400,7 @@ class _FinanceEntrySheetState extends State<_FinanceEntrySheet> {
                             keyboardType: TextInputType.number,
                             decoration: const InputDecoration(labelText: 'Qty'),
                             validator: _number,
+                            onChanged: (_) => setState(() {}),
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -1214,21 +1412,63 @@ class _FinanceEntrySheetState extends State<_FinanceEntrySheet> {
                               labelText: 'Unit price',
                             ),
                             validator: _number,
+                            onChanged: (_) => setState(() {}),
                           ),
                         ),
                         IconButton(
                           onPressed: components.length == 1
                               ? null
-                              : () => setState(() => components.removeAt(i)),
+                              : () => setState(() {
+                                  components.removeAt(i);
+                                  componentGstIncluded.removeAt(i);
+                                }),
                           icon: const Icon(Icons.delete_outline),
                         ),
                       ],
                     ),
+                    if (widget.settings.gstEnabled && gst != 'none') ...[
+                      CheckboxListTile(
+                        contentPadding: EdgeInsets.zero,
+                        value: componentGstIncluded[i],
+                        onChanged: (value) => setState(
+                          () => componentGstIncluded[i] = value ?? false,
+                        ),
+                        title: const Text('GST Included'),
+                        subtitle: Text(
+                          componentGstIncluded[i]
+                              ? 'GST is extracted from this entered amount.'
+                              : 'GST is added over this entered amount.',
+                        ),
+                      ),
+                      Builder(
+                        builder: (_) {
+                          final value = _componentAmounts(i);
+                          return Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xff10263a),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: const Color(0xff17688a),
+                              ),
+                            ),
+                            child: Text(
+                              'Taxable ${_money(value.taxable)}  •  GST ${_money(value.tax)}  •  Total ${_money(value.total)}',
+                              style: const TextStyle(
+                                color: Color(0xff70ddff),
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
                   ],
                 ),
               ),
             ),
-          if (widget.type == 'income' && widget.settings.gstEnabled)
+          if (widget.settings.gstEnabled)
             DropdownButtonFormField(
               initialValue: gst,
               decoration: const InputDecoration(labelText: 'GST treatment'),
@@ -1240,8 +1480,50 @@ class _FinanceEntrySheetState extends State<_FinanceEntrySheet> {
                 ),
                 DropdownMenuItem(value: 'igst', child: Text('IGST')),
               ],
-              onChanged: (v) => gst = v!,
+              onChanged: (v) => setState(() => gst = v!),
             ),
+          if (widget.settings.gstEnabled) ...[
+            const SizedBox(height: 10),
+            Builder(
+              builder: (_) {
+                final value = _entryAmounts;
+                final cgst = gst == 'cgst_sgst' ? value.tax / 2 : 0.0;
+                final sgst = gst == 'cgst_sgst' ? value.tax - cgst : 0.0;
+                final igst = gst == 'igst' ? value.tax : 0.0;
+                return Card(
+                  color: const Color(0xff10263a),
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Live GST preview',
+                          style: TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                        const SizedBox(height: 8),
+                        Text('Taxable value: ${_money(value.taxable)}'),
+                        if (gst == 'cgst_sgst') ...[
+                          Text('CGST: ${_money(cgst)}'),
+                          Text('SGST: ${_money(sgst)}'),
+                        ],
+                        if (gst == 'igst') Text('IGST: ${_money(igst)}'),
+                        const Divider(),
+                        Text(
+                          'Grand total: ${_money(value.total)}',
+                          style: const TextStyle(
+                            color: VistoraColors.green,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
           if (widget.type == 'income')
             SwitchListTile(
               value: invoice,
@@ -1275,6 +1557,11 @@ class _FinanceEntrySheetState extends State<_FinanceEntrySheet> {
       v == null || v.trim().isEmpty ? 'Required' : null;
   String? _number(String? v) =>
       (double.tryParse(v ?? '') ?? -1) < 0 ? 'Enter a valid amount' : null;
+  String _money(double value) => NumberFormat.currency(
+    locale: 'en_IN',
+    symbol: '₹',
+    decimalDigits: 2,
+  ).format(value);
   Future<void> _save() async {
     if (!form.currentState!.validate()) return;
     setState(() => saving = true);
@@ -1307,17 +1594,20 @@ class _FinanceEntrySheetState extends State<_FinanceEntrySheet> {
         'card_last_four': mode == 'card' && cardLastFour.text.trim().isNotEmpty
             ? cardLastFour.text.trim()
             : null,
-        'gst_type': widget.type == 'income' ? gst : 'none',
+        'gst_type': gst,
         'cgst_percent': widget.settings.cgst,
         'sgst_percent': widget.settings.sgst,
         'igst_percent': widget.settings.igst,
         'components': [
-          for (final c in components)
+          for (int i = 0; i < components.length; i++)
             {
-              'description': c[0].text.trim(),
-              'hsn_sac': c[1].text.trim().isEmpty ? null : c[1].text.trim(),
-              'quantity': double.parse(c[2].text),
-              'unit_price': double.parse(c[3].text),
+              'description': components[i][0].text.trim(),
+              'hsn_sac': components[i][1].text.trim().isEmpty
+                  ? null
+                  : components[i][1].text.trim(),
+              'quantity': double.parse(components[i][2].text),
+              'unit_price': double.parse(components[i][3].text),
+              'gst_included': componentGstIncluded[i],
             },
         ],
         'generate_invoice': invoice,

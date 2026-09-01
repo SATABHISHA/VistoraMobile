@@ -23,6 +23,9 @@ void main() {
           'description': 'Implementation',
           'quantity': '2.000',
           'unit_price': '5000.00',
+          'gst_included': true,
+          'taxable_amount': '8474.58',
+          'tax_amount': '1525.42',
           'amount': '10000.00',
         },
       ],
@@ -31,6 +34,9 @@ void main() {
 
     expect(entry.total, 11800);
     expect(entry.components.single.quantity, 2);
+    expect(entry.components.single.gstIncluded, isTrue);
+    expect(entry.components.single.taxableAmount, 8474.58);
+    expect(entry.components.single.taxAmount, 1525.42);
     expect(entry.cgstAmount + entry.sgstAmount, 1800);
     expect(entry.invoice?['invoice_no'], 'VF260000001');
   });
