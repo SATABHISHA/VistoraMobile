@@ -1313,6 +1313,7 @@ class _SettingsViewState extends ConsumerState<_SettingsView> {
   bool _initialized = false;
   bool _saving = false;
   bool _autoConfirm = false;
+  bool _supervisorCanAssignSelf = false;
 
   @override
   void initState() {
@@ -1339,10 +1340,12 @@ class _SettingsViewState extends ConsumerState<_SettingsView> {
           .updateSettings(
             maxLocationsPerDoctor: value,
             autoConfirmVisitReports: _autoConfirm,
+            supervisorCanAssignSelf: _supervisorCanAssignSelf,
           );
       if (!mounted) return;
       _limit.text = '${settings.maxLocationsPerDoctor}';
       _autoConfirm = settings.autoConfirmVisitReports;
+      _supervisorCanAssignSelf = settings.supervisorCanAssignSelf;
       ref.invalidate(mrSettingsProvider);
       ref.invalidate(mrMetadataProvider);
       _message('MR settings saved.', success: true);
@@ -1374,174 +1377,250 @@ class _SettingsViewState extends ConsumerState<_SettingsView> {
         );
 
   @override
-  Widget build(BuildContext context) => FutureBuilder<MrSettings>(
-    future: _future,
-    builder: (context, snapshot) {
-      if (snapshot.connectionState != ConnectionState.done) {
-        return const Center(child: CircularProgressIndicator());
-      }
-      if (snapshot.hasError) {
-        return _ErrorList(
-          error: snapshot.error!,
-          onRetry: () {
-            setState(() => _future = ref.read(mrRepositoryProvider).settings());
-            return _future;
-          },
-        );
-      }
-      if (!_initialized) {
-        _limit.text = '${snapshot.requireData.maxLocationsPerDoctor}';
-        _autoConfirm = snapshot.requireData.autoConfirmVisitReports;
-        _initialized = true;
-      }
-      return ListView(
-        padding: const EdgeInsets.all(18),
-        children: [
-          Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 760),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(24),
-                      gradient: const LinearGradient(
-                        colors: [Color(0x33FF6A00), Color(0x2200D2FF)],
-                      ),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: .1),
-                      ),
-                    ),
-                    child: const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(Icons.tune, color: VistoraColors.orange, size: 34),
-                        SizedBox(height: 12),
-                        Text(
-                          'MR module settings',
-                          style: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.w900,
-                          ),
+  Widget build(BuildContext context) {
+    final canConfigureSelfAssignment = ref
+        .watch(authControllerProvider)
+        .session
+        ?.user
+        .normalizedRole;
+    final canEditSelfAssignment =
+        canConfigureSelfAssignment == 'admin' ||
+        canConfigureSelfAssignment == 'hr';
+    return FutureBuilder<MrSettings>(
+      future: _future,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          return _ErrorList(
+            error: snapshot.error!,
+            onRetry: () {
+              setState(
+                () => _future = ref.read(mrRepositoryProvider).settings(),
+              );
+              return _future;
+            },
+          );
+        }
+        if (!_initialized) {
+          _limit.text = '${snapshot.requireData.maxLocationsPerDoctor}';
+          _autoConfirm = snapshot.requireData.autoConfirmVisitReports;
+          _supervisorCanAssignSelf =
+              snapshot.requireData.supervisorCanAssignSelf;
+          _initialized = true;
+        }
+        return ListView(
+          padding: const EdgeInsets.all(18),
+          children: [
+            Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 760),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(24),
+                        gradient: const LinearGradient(
+                          colors: [Color(0x33FF6A00), Color(0x2200D2FF)],
                         ),
-                        SizedBox(height: 8),
-                        Text(
-                          'Configure tenant-wide doctor and location behaviour. Changes are audited and apply to Laravel and mobile clients.',
-                          style: TextStyle(color: VistoraColors.muted),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: .1),
                         ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                      ),
+                      child: const Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'Maximum locations per doctor',
+                          Icon(
+                            Icons.tune,
+                            color: VistoraColors.orange,
+                            size: 34,
+                          ),
+                          SizedBox(height: 12),
+                          Text(
+                            'MR module settings',
                             style: TextStyle(
+                              fontSize: 24,
                               fontWeight: FontWeight.w900,
-                              fontSize: 18,
                             ),
                           ),
-                          const SizedBox(height: 6),
-                          const Text(
-                            'A doctor cannot be mapped above this limit. The limit cannot be reduced below mappings already in use.',
+                          SizedBox(height: 8),
+                          Text(
+                            'Configure tenant-wide doctor and location behaviour. Changes are audited and apply to Laravel and mobile clients.',
                             style: TextStyle(color: VistoraColors.muted),
-                          ),
-                          const SizedBox(height: 16),
-                          TextField(
-                            controller: _limit,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              labelText: 'Location limit',
-                              prefixIcon: Icon(Icons.pin_drop_outlined),
-                              suffixText: 'per doctor',
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          AnimatedContainer(
-                            duration: const Duration(milliseconds: 260),
-                            curve: Curves.easeOutCubic,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(18),
-                              gradient: LinearGradient(
-                                colors: _autoConfirm
-                                    ? const [
-                                        Color(0x3324E59B),
-                                        Color(0x2218C8FF),
-                                      ]
-                                    : const [
-                                        Color(0x18FFFFFF),
-                                        Color(0x0DFFFFFF),
-                                      ],
-                              ),
-                              border: Border.all(
-                                color: _autoConfirm
-                                    ? VistoraColors.green.withValues(alpha: .5)
-                                    : Colors.white.withValues(alpha: .1),
-                              ),
-                            ),
-                            child: SwitchListTile.adaptive(
-                              value: _autoConfirm,
-                              onChanged: _saving
-                                  ? null
-                                  : (value) =>
-                                        setState(() => _autoConfirm = value),
-                              secondary: AnimatedSwitcher(
-                                duration: const Duration(milliseconds: 220),
-                                child: Icon(
-                                  _autoConfirm
-                                      ? Icons.bolt_rounded
-                                      : Icons.fact_check_outlined,
-                                  key: ValueKey(_autoConfirm),
-                                  color: _autoConfirm
-                                      ? VistoraColors.green
-                                      : VistoraColors.amber,
-                                ),
-                              ),
-                              title: const Text(
-                                'Auto-confirm visit reports',
-                                style: TextStyle(fontWeight: FontWeight.w900),
-                              ),
-                              subtitle: const Text(
-                                'Immediately approves employee and supervisor reports. Authorized HR/Admin and supervisors can still revert a subordinate review.',
-                                style: TextStyle(color: VistoraColors.muted),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: FilledButton.icon(
-                              onPressed: _saving ? null : _save,
-                              icon: _saving
-                                  ? const SizedBox.square(
-                                      dimension: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : const Icon(Icons.save_outlined),
-                              label: const Text('Save setting'),
-                            ),
                           ),
                         ],
                       ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 16),
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            const Text(
+                              'Maximum locations per doctor',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 18,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            const Text(
+                              'A doctor cannot be mapped above this limit. The limit cannot be reduced below mappings already in use.',
+                              style: TextStyle(color: VistoraColors.muted),
+                            ),
+                            const SizedBox(height: 16),
+                            TextField(
+                              controller: _limit,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(
+                                labelText: 'Location limit',
+                                prefixIcon: Icon(Icons.pin_drop_outlined),
+                                suffixText: 'per doctor',
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            AnimatedContainer(
+                              duration: const Duration(milliseconds: 260),
+                              curve: Curves.easeOutCubic,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(18),
+                                gradient: LinearGradient(
+                                  colors: _autoConfirm
+                                      ? const [
+                                          Color(0x3324E59B),
+                                          Color(0x2218C8FF),
+                                        ]
+                                      : const [
+                                          Color(0x18FFFFFF),
+                                          Color(0x0DFFFFFF),
+                                        ],
+                                ),
+                                border: Border.all(
+                                  color: _autoConfirm
+                                      ? VistoraColors.green.withValues(
+                                          alpha: .5,
+                                        )
+                                      : Colors.white.withValues(alpha: .1),
+                                ),
+                              ),
+                              child: SwitchListTile.adaptive(
+                                value: _autoConfirm,
+                                onChanged: _saving
+                                    ? null
+                                    : (value) =>
+                                          setState(() => _autoConfirm = value),
+                                secondary: AnimatedSwitcher(
+                                  duration: const Duration(milliseconds: 220),
+                                  child: Icon(
+                                    _autoConfirm
+                                        ? Icons.bolt_rounded
+                                        : Icons.fact_check_outlined,
+                                    key: ValueKey(_autoConfirm),
+                                    color: _autoConfirm
+                                        ? VistoraColors.green
+                                        : VistoraColors.amber,
+                                  ),
+                                ),
+                                title: const Text(
+                                  'Auto-confirm visit reports',
+                                  style: TextStyle(fontWeight: FontWeight.w900),
+                                ),
+                                subtitle: const Text(
+                                  'Immediately approves employee and supervisor reports. Authorized HR/Admin and supervisors can still revert a subordinate review.',
+                                  style: TextStyle(color: VistoraColors.muted),
+                                ),
+                              ),
+                            ),
+                            if (canEditSelfAssignment) ...[
+                              const SizedBox(height: 16),
+                              AnimatedContainer(
+                                duration: const Duration(milliseconds: 260),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(18),
+                                  gradient: LinearGradient(
+                                    colors: _supervisorCanAssignSelf
+                                        ? const [
+                                            Color(0x3324E59B),
+                                            Color(0x2218C8FF),
+                                          ]
+                                        : const [
+                                            Color(0x18FFFFFF),
+                                            Color(0x0DFFFFFF),
+                                          ],
+                                  ),
+                                  border: Border.all(
+                                    color: _supervisorCanAssignSelf
+                                        ? VistoraColors.green.withValues(
+                                            alpha: .5,
+                                          )
+                                        : Colors.white.withValues(alpha: .1),
+                                  ),
+                                ),
+                                child: SwitchListTile.adaptive(
+                                  value: _supervisorCanAssignSelf,
+                                  onChanged: _saving
+                                      ? null
+                                      : (value) => setState(
+                                          () =>
+                                              _supervisorCanAssignSelf = value,
+                                        ),
+                                  secondary: Icon(
+                                    _supervisorCanAssignSelf
+                                        ? Icons.person_pin_circle_outlined
+                                        : Icons.person_outline,
+                                    color: _supervisorCanAssignSelf
+                                        ? VistoraColors.green
+                                        : VistoraColors.amber,
+                                  ),
+                                  title: const Text(
+                                    'Allow supervisor self-assignment',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                  subtitle: const Text(
+                                    'Supervisors can assign doctor visits to themselves as well as to their subordinates.',
+                                    style: TextStyle(
+                                      color: VistoraColors.muted,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 16),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: FilledButton.icon(
+                                onPressed: _saving ? null : _save,
+                                icon: _saving
+                                    ? const SizedBox.square(
+                                        dimension: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : const Icon(Icons.save_outlined),
+                                label: const Text('Save setting'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
-      );
-    },
-  );
+          ],
+        );
+      },
+    );
+  }
 }
 
 class _RecordCard extends StatelessWidget {

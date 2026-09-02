@@ -49,10 +49,12 @@ class MrSettings {
   const MrSettings({
     this.maxLocationsPerDoctor = 2,
     this.autoConfirmVisitReports = false,
+    this.supervisorCanAssignSelf = false,
   });
 
   final int maxLocationsPerDoctor;
   final bool autoConfirmVisitReports;
+  final bool supervisorCanAssignSelf;
 
   factory MrSettings.fromJson(Map<String, dynamic> json) => MrSettings(
     maxLocationsPerDoctor: asInt(
@@ -60,6 +62,7 @@ class MrSettings {
       2,
     ).clamp(1, 50),
     autoConfirmVisitReports: json['auto_confirm_visit_reports'] == true,
+    supervisorCanAssignSelf: json['supervisor_can_assign_self'] == true,
   );
 }
 

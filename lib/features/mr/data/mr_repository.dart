@@ -19,12 +19,14 @@ class MrRepository {
   Future<MrSettings> updateSettings({
     required int maxLocationsPerDoctor,
     required bool autoConfirmVisitReports,
+    required bool supervisorCanAssignSelf,
   }) async {
     final response = await _api.put(
       '/mr/settings',
       data: {
         'max_locations_per_doctor': maxLocationsPerDoctor,
         'auto_confirm_visit_reports': autoConfirmVisitReports,
+        'supervisor_can_assign_self': supervisorCanAssignSelf,
       },
     );
     return MrSettings.fromJson(asMap(asMap(response['data'])['settings']));
