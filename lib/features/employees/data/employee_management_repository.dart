@@ -87,4 +87,28 @@ class EmployeeManagementRepository {
       'password_confirmation': password,
     },
   );
+
+  Future<String> createInvitation({
+    required String email,
+    String? employeeName,
+  }) async {
+    final response = await _api.post(
+      '/employee-invitations',
+      data: {
+        'email': email.trim(),
+        if (employeeName?.trim().isNotEmpty == true)
+          'employee_name': employeeName!.trim(),
+        'validity_type': '7-days',
+      },
+    );
+    return asMap(response['data'])['invitationUrl']?.toString() ?? '';
+  }
+
+  Future<bool> emailInvitation({required String token, String? email}) async {
+    final response = await _api.post(
+      '/employee-invitations/$token/email',
+      data: {if (email?.trim().isNotEmpty == true) 'email': email!.trim()},
+    );
+    return asMap(response['data'])['sent'] == true;
+  }
 }

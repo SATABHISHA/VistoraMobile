@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:vistora_mobile/app/providers.dart';
 import 'package:vistora_mobile/app/theme/app_theme.dart';
 import 'package:vistora_mobile/features/employees/data/employee_management_repository.dart';
@@ -194,6 +196,132 @@ class _EmployeeManagementScreenState
             ),
       employee == null ? 'Employee created.' : 'Employee updated.',
     );
+  }
+
+  void _snack(String message) => ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+  );
+
+  void _showDetails(ManagedEmployee employee) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(employee.name),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _detail('Employee code', employee.code),
+              _detail('Role', employee.role),
+              _detail('Designation', employee.designation),
+              _detail('Department', employee.department),
+              _detail('Branch', employee.branch),
+              _detail('State', employee.state),
+              _detail('Business unit', employee.businessUnit),
+              _detail('Work email', employee.workEmail),
+              _detail('Mobile', employee.mobile),
+              _detail(
+                'Date of birth',
+                employee.dob == null ? null : _date(employee.dob!),
+              ),
+              _detail(
+                'Joining date',
+                employee.joiningDate == null
+                    ? null
+                    : _date(employee.joiningDate!),
+              ),
+              _detail('Username', employee.username),
+              _detail(
+                'Net monthly',
+                employee.netMonthly == null
+                    ? null
+                    : _money(employee.netMonthly!),
+              ),
+              _detail(
+                'Annual CTC',
+                employee.ctcAnnual == null ? null : _money(employee.ctcAnnual!),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _invite(ManagedEmployee employee) async {
+    final email = employee.workEmail;
+    if (email == null || email.isEmpty) {
+      _snack(
+        'Add a work email to this employee before sending an onboarding link.',
+      );
+      return;
+    }
+    await _action(() async {
+      final url = await repository.createInvitation(
+        email: email,
+        employeeName: employee.name,
+      );
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Onboarding link ready'),
+          content: SelectableText(url),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                try {
+                  final sent = await repository.emailInvitation(
+                    token: url.split('/').last,
+                    email: email,
+                  );
+                  if (context.mounted) {
+                    _snack(
+                      sent
+                          ? 'Branded onboarding email sent.'
+                          : 'SMTP is not configured. Copy the link or use your email app.',
+                    );
+                  }
+                } catch (error) {
+                  if (context.mounted) _snack(error.toString());
+                }
+              },
+              child: const Text('Send company email'),
+            ),
+            TextButton(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: url));
+                if (context.mounted) _snack('Copied.');
+              },
+              child: const Text('Copy'),
+            ),
+            TextButton(
+              onPressed: () => launchUrl(
+                Uri(
+                  scheme: 'mailto',
+                  queryParameters: {
+                    'to': email,
+                    'subject': 'Complete your Vistora onboarding',
+                    'body': 'Please complete your onboarding: $url',
+                  },
+                ),
+              ),
+              child: const Text('Open email app'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      );
+    }, 'Onboarding link generated.');
   }
 
   Future<void> _credentials(ManagedEmployee employee) async {
@@ -404,6 +532,8 @@ class _EmployeeManagementScreenState
                       salary: () => context.go(
                         '/salary-structures?q=${Uri.encodeQueryComponent(entry.value.code)}',
                       ),
+                      details: () => _showDetails(entry.value),
+                      invite: () => _invite(entry.value),
                     ),
                   ),
                 ),
@@ -454,6 +584,8 @@ class _EmployeeCard extends StatelessWidget {
     required this.toggle,
     required this.attendance,
     required this.salary,
+    required this.details,
+    required this.invite,
   });
 
   final ManagedEmployee employee;
@@ -463,6 +595,8 @@ class _EmployeeCard extends StatelessWidget {
   final VoidCallback toggle;
   final VoidCallback attendance;
   final VoidCallback salary;
+  final VoidCallback details;
+  final VoidCallback invite;
 
   @override
   Widget build(BuildContext context) {
@@ -537,6 +671,11 @@ class _EmployeeCard extends StatelessWidget {
               spacing: 8,
               runSpacing: 8,
               children: [
+                TextButton.icon(
+                  onPressed: details,
+                  icon: const Icon(Icons.visibility_outlined, size: 18),
+                  label: const Text('Full details'),
+                ),
                 if (employee.designation != null)
                   _Tag(Icons.badge_outlined, employee.designation!),
                 if (employee.department != null)
@@ -615,6 +754,11 @@ class _EmployeeCard extends StatelessWidget {
                   ),
                 ),
                 TextButton.icon(
+                  onPressed: busy ? null : invite,
+                  icon: const Icon(Icons.link_outlined, size: 18),
+                  label: const Text('Onboarding link'),
+                ),
+                TextButton.icon(
                   onPressed: busy ? null : toggle,
                   icon: Icon(
                     employee.status == 'active'
@@ -680,6 +824,27 @@ class _EmployeeError extends StatelessWidget {
   );
 }
 
+Widget _detail(String label, String? value) => Padding(
+  padding: const EdgeInsets.only(bottom: 10),
+  child: Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      SizedBox(
+        width: 125,
+        child: Text(label, style: const TextStyle(color: VistoraColors.muted)),
+      ),
+      Expanded(
+        child: Text(
+          value?.isNotEmpty == true ? value! : '—',
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+      ),
+    ],
+  ),
+);
+String _date(DateTime value) => DateFormat('dd MMM yyyy').format(value);
+String _money(double value) =>
+    NumberFormat.currency(locale: 'en_IN', symbol: '₹').format(value);
 String _initials(String name) => name
     .split(RegExp(r'\s+'))
     .where((part) => part.isNotEmpty)

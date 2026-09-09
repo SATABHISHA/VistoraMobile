@@ -37,6 +37,28 @@ class HrOperationsRepository {
   Future<void> createCandidate(Map<String, dynamic> data) =>
       _api.post('/recruitment', data: data);
 
+  Future<Map<String, dynamic>> createApplicationLink({int? jobPostId}) async {
+    final response = await _api.post(
+      '/recruitment/application-links',
+      data: {
+        if (jobPostId != null) ...{'job_post_id': jobPostId},
+      },
+    );
+    return asMap(asMap(response['data'])['link'])
+      ..['applicationUrl'] = asMap(response['data'])['applicationUrl'];
+  }
+
+  Future<bool> emailApplicationLink({
+    required int linkId,
+    required String email,
+  }) async {
+    final response = await _api.post(
+      '/recruitment/application-links/$linkId/email',
+      data: {'email': email},
+    );
+    return asMap(asMap(response['data']))['sent'] == true;
+  }
+
   Future<void> pipelineAction(int candidateId, String action) => _api.post(
     '/recruitment/$candidateId/pipeline-action',
     data: {'action': action},

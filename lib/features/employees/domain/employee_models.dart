@@ -32,6 +32,14 @@ class ManagedEmployee {
     this.username,
     this.ctcAnnual,
     this.netMonthly,
+    this.middleName,
+    this.dob,
+    this.gender,
+    this.nationality,
+    this.state,
+    this.businessUnit,
+    this.reportingManager,
+    this.joiningDate,
   });
 
   final int id;
@@ -48,6 +56,14 @@ class ManagedEmployee {
   final String? username;
   final double? ctcAnnual;
   final double? netMonthly;
+  final String? middleName;
+  final DateTime? dob;
+  final String? gender;
+  final String? nationality;
+  final String? state;
+  final String? businessUnit;
+  final String? reportingManager;
+  final DateTime? joiningDate;
 
   String get name => '$firstName $lastName'.trim();
   bool get hasCredentials => username?.isNotEmpty == true;
@@ -60,6 +76,7 @@ class ManagedEmployee {
       code: json['emp_code']?.toString() ?? '',
       firstName: json['first_name']?.toString() ?? '',
       lastName: json['last_name']?.toString() ?? '',
+      middleName: asNullableString(json['middle_name']),
       role: json['role_type']?.toString() ?? 'Employee',
       status: json['status']?.toString() ?? 'inactive',
       workEmail: asNullableString(json['work_email']),
@@ -74,6 +91,15 @@ class ManagedEmployee {
       netMonthly: salary['net_monthly'] == null
           ? null
           : asDouble(salary['net_monthly']),
+      dob: asDateTime(json['dob']),
+      gender: asNullableString(json['gender']),
+      nationality: asNullableString(json['nationality']),
+      state: asNullableString(asMap(json['state'])['name']),
+      businessUnit: asNullableString(asMap(json['business_unit'])['name']),
+      reportingManager: asNullableString(
+        asMap(json['reporting_manager'])['first_name'],
+      ),
+      joiningDate: asDateTime(json['doj']),
     );
   }
 }

@@ -904,8 +904,7 @@ class _AssignmentEditorState extends ConsumerState<_AssignmentEditor> {
               ),
               const SizedBox(height: 14),
               DropdownButtonFormField<int>(
-                value:
-                    mappedLocations.any((item) => item.id == _locationId)
+                value: mappedLocations.any((item) => item.id == _locationId)
                     ? _locationId
                     : null,
                 decoration: InputDecoration(

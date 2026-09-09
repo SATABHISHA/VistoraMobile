@@ -2,7 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:vistora_mobile/app/providers.dart';
 import 'package:vistora_mobile/app/theme/app_theme.dart';
 import 'package:vistora_mobile/features/hr_operations/data/hr_operations_repository.dart';
@@ -247,10 +249,21 @@ class _RecruitmentTabState extends ConsumerState<_RecruitmentTab> {
         const SizedBox(height: 12),
         Align(
           alignment: Alignment.centerLeft,
-          child: FilledButton.icon(
-            onPressed: _busy ? null : _addCandidate,
-            icon: const Icon(Icons.person_add_alt_1),
-            label: const Text('Add candidate'),
+          child: Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              FilledButton.icon(
+                onPressed: _busy ? null : _addCandidate,
+                icon: const Icon(Icons.person_add_alt_1),
+                label: const Text('Add candidate'),
+              ),
+              OutlinedButton.icon(
+                onPressed: _busy ? null : _generateApplicationLink,
+                icon: const Icon(Icons.link_outlined),
+                label: const Text('Share application link'),
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 14),
@@ -302,6 +315,28 @@ class _RecruitmentTabState extends ConsumerState<_RecruitmentTab> {
       ],
     ),
   );
+
+  Future<void> _generateApplicationLink() async {
+    setState(() => _busy = true);
+    try {
+      final link = await repository.createApplicationLink();
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (context) => _ApplicationLinkDialog(
+          link: link,
+          onEmail: (email) => repository.emailApplicationLink(
+            linkId: int.tryParse('${link['id']}') ?? 0,
+            email: email,
+          ),
+        ),
+      );
+    } catch (error) {
+      if (mounted) _toast(error.toString(), error: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
 
   Widget _candidateCard(RecruitmentCandidate item) => Card(
     child: Padding(
@@ -2005,6 +2040,112 @@ void _showDocument(BuildContext context, String title, String html) =>
         ),
       ),
     );
+
+class _ApplicationLinkDialog extends StatefulWidget {
+  const _ApplicationLinkDialog({required this.link, required this.onEmail});
+  final Map<String, dynamic> link;
+  final Future<bool> Function(String email) onEmail;
+
+  @override
+  State<_ApplicationLinkDialog> createState() => _ApplicationLinkDialogState();
+}
+
+class _ApplicationLinkDialogState extends State<_ApplicationLinkDialog> {
+  final _email = TextEditingController();
+  bool _sending = false;
+
+  @override
+  void dispose() {
+    _email.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final url = widget.link['applicationUrl']?.toString() ?? '';
+    return AlertDialog(
+      title: const Text('Application link ready'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text('Share this tenant-secured link with the candidate.'),
+            const SizedBox(height: 12),
+            SelectableText(
+              url,
+              style: const TextStyle(color: VistoraColors.cyan),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: _email,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(labelText: 'Candidate email'),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: url));
+                if (context.mounted) {
+                  _snack(context, 'Application link copied.');
+                }
+              },
+              icon: const Icon(Icons.copy_outlined),
+              label: const Text('Copy link'),
+            ),
+            FilledButton.icon(
+              onPressed: _sending
+                  ? null
+                  : () async {
+                      if (_email.text.trim().isEmpty) {
+                        _snack(context, 'Enter a candidate email.');
+                        return;
+                      }
+                      setState(() => _sending = true);
+                      try {
+                        final sent = await widget.onEmail(_email.text.trim());
+                        if (context.mounted) {
+                          _snack(
+                            context,
+                            sent
+                                ? 'Branded invitation sent.'
+                                : 'Tenant SMTP is not configured. Use Copy link or email app.',
+                          );
+                        }
+                      } finally {
+                        if (mounted) setState(() => _sending = false);
+                      }
+                    },
+              icon: const Icon(Icons.mark_email_read_outlined),
+              label: const Text('Send company email'),
+            ),
+            OutlinedButton.icon(
+              onPressed: () => launchUrl(
+                Uri(
+                  scheme: 'mailto',
+                  queryParameters: {
+                    'to': _email.text.trim(),
+                    'subject': 'Invitation to apply',
+                    'body': 'Please complete your application: $url',
+                  },
+                ),
+              ),
+              icon: const Icon(Icons.open_in_new),
+              label: const Text('Open email app'),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+      ],
+    );
+  }
+}
+
 String _stripHtml(String html) => html
     .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
     .replaceAll(

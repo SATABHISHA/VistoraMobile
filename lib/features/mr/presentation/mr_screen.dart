@@ -67,6 +67,14 @@ class MrScreen extends ConsumerWidget {
       'supervisor',
       'superadmin',
     }.contains(role);
+    final employeeCatalog =
+        role == 'employee' &&
+        ref
+            .watch(mrMetadataProvider)
+            .maybeWhen(
+              data: (metadata) => metadata.settings.employeeCanAssignSelf,
+              orElse: () => false,
+            );
     final sections = <_MrSection>[
       if (selfService) _MrSection.myVisits,
       if (selfService) _MrSection.myReports,
@@ -78,6 +86,11 @@ class MrScreen extends ConsumerWidget {
       if (manager) _MrSection.expenseApprovals,
       if (manager) _MrSection.settings,
       if (manager) _MrSection.audit,
+      if (employeeCatalog) ...[
+        _MrSection.doctors,
+        _MrSection.locations,
+        _MrSection.assignments,
+      ],
     ];
 
     return DefaultTabController(
@@ -1314,6 +1327,7 @@ class _SettingsViewState extends ConsumerState<_SettingsView> {
   bool _saving = false;
   bool _autoConfirm = false;
   bool _supervisorCanAssignSelf = false;
+  bool _employeeCanAssignSelf = false;
 
   @override
   void initState() {
@@ -1341,11 +1355,13 @@ class _SettingsViewState extends ConsumerState<_SettingsView> {
             maxLocationsPerDoctor: value,
             autoConfirmVisitReports: _autoConfirm,
             supervisorCanAssignSelf: _supervisorCanAssignSelf,
+            employeeCanAssignSelf: _employeeCanAssignSelf,
           );
       if (!mounted) return;
       _limit.text = '${settings.maxLocationsPerDoctor}';
       _autoConfirm = settings.autoConfirmVisitReports;
       _supervisorCanAssignSelf = settings.supervisorCanAssignSelf;
+      _employeeCanAssignSelf = settings.employeeCanAssignSelf;
       ref.invalidate(mrSettingsProvider);
       ref.invalidate(mrMetadataProvider);
       _message('MR settings saved.', success: true);
@@ -1408,6 +1424,7 @@ class _SettingsViewState extends ConsumerState<_SettingsView> {
           _autoConfirm = snapshot.requireData.autoConfirmVisitReports;
           _supervisorCanAssignSelf =
               snapshot.requireData.supervisorCanAssignSelf;
+          _employeeCanAssignSelf = snapshot.requireData.employeeCanAssignSelf;
           _initialized = true;
         }
         return ListView(
@@ -1585,6 +1602,52 @@ class _SettingsViewState extends ConsumerState<_SettingsView> {
                                   ),
                                   subtitle: const Text(
                                     'Supervisors can assign doctor visits to themselves as well as to their subordinates.',
+                                    style: TextStyle(
+                                      color: VistoraColors.muted,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                            if (canEditSelfAssignment) ...[
+                              const SizedBox(height: 16),
+                              AnimatedContainer(
+                                duration: const Duration(milliseconds: 260),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(18),
+                                  color: _employeeCanAssignSelf
+                                      ? VistoraColors.green.withValues(
+                                          alpha: .12,
+                                        )
+                                      : Colors.white.withValues(alpha: .03),
+                                  border: Border.all(
+                                    color: _employeeCanAssignSelf
+                                        ? VistoraColors.green.withValues(
+                                            alpha: .5,
+                                          )
+                                        : Colors.white.withValues(alpha: .1),
+                                  ),
+                                ),
+                                child: SwitchListTile.adaptive(
+                                  value: _employeeCanAssignSelf,
+                                  onChanged: _saving
+                                      ? null
+                                      : (value) => setState(
+                                          () => _employeeCanAssignSelf = value,
+                                        ),
+                                  secondary: Icon(
+                                    _employeeCanAssignSelf
+                                        ? Icons.people_alt_outlined
+                                        : Icons.person_outline,
+                                  ),
+                                  title: const Text(
+                                    'Allow employees to assign doctors to themselves',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                  subtitle: const Text(
+                                    'Employees can create their own doctor visits and add doctors or locations within their tenant territory.',
                                     style: TextStyle(
                                       color: VistoraColors.muted,
                                     ),

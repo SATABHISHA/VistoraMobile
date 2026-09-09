@@ -20,6 +20,7 @@ class MrRepository {
     required int maxLocationsPerDoctor,
     required bool autoConfirmVisitReports,
     required bool supervisorCanAssignSelf,
+    required bool employeeCanAssignSelf,
   }) async {
     final response = await _api.put(
       '/mr/settings',
@@ -27,6 +28,7 @@ class MrRepository {
         'max_locations_per_doctor': maxLocationsPerDoctor,
         'auto_confirm_visit_reports': autoConfirmVisitReports,
         'supervisor_can_assign_self': supervisorCanAssignSelf,
+        'employee_can_assign_self': employeeCanAssignSelf,
       },
     );
     return MrSettings.fromJson(asMap(asMap(response['data'])['settings']));

@@ -25,9 +25,17 @@ $devices = @(Invoke-FlutterJson @("devices", "--machine"))
 $physicalDevices = @($devices | Where-Object {
     $_.isSupported -and $_.targetPlatform -like "android-*" -and -not $_.emulator
 })
+$connectedEmulators = @($devices | Where-Object {
+    $_.isSupported -and $_.targetPlatform -like "android-*" -and $_.emulator
+})
 $usingWirelessDevice = $false
 
-if ($physicalDevices.Count -gt 0) {
+if ($connectedEmulators.Count -gt 0) {
+    # Reuse an emulator that is already running instead of launching a second
+    # instance of the configured AVD (which can fail with exit code 1).
+    $deviceId = $connectedEmulators[0].id
+    Write-Host "Using connected Android emulator '$deviceId'." -ForegroundColor Green
+} elseif ($physicalDevices.Count -gt 0) {
     Write-Host "Physical Android device(s) found:" -ForegroundColor Green
     for ($i = 0; $i -lt $physicalDevices.Count; $i++) {
         Write-Host ("  [{0}] {1} ({2})" -f ($i + 1), $physicalDevices[$i].name, $physicalDevices[$i].id)
