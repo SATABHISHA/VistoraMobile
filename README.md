@@ -68,6 +68,15 @@ flutter test
 flutter build apk --debug
 ```
 
+## Android Play signing
+
+Release signing credentials are stored locally in `android/key.properties`, and
+the signing keystore is `android/app/vistora-release.jks`. These files are
+ignored by Git and must remain out of tracked documentation and source control.
+To recover the configured passwords, open `android/key.properties` locally and
+read `storePassword` and `keyPassword`. Keep a secure backup in a password
+manager; losing the upload key may prevent future Play Console updates.
+
 ## Quick local run
 
 On Windows, use the device-aware launcher. It offers detected wireless Android devices and otherwise starts the Android emulator automatically:
