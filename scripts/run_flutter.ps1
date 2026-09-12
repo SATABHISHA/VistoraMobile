@@ -16,6 +16,23 @@ function Invoke-FlutterJson([string[]]$Arguments) {
     return ($json -join "`n" | ConvertFrom-Json)
 }
 
+function Start-AndroidEmulator([string]$EmulatorId) {
+    Write-Host "Starting Android emulator '$EmulatorId'..." -ForegroundColor Yellow
+    & flutter emulators --launch $EmulatorId
+    if ($LASTEXITCODE -ne 0) { throw "Could not start emulator '$EmulatorId'." }
+
+    Write-Host "Waiting for the emulator to connect..."
+    for ($attempt = 1; $attempt -le 30; $attempt++) {
+        Start-Sleep -Seconds 2
+        $runtimeDevices = @(Invoke-FlutterJson @("devices", "--machine"))
+        $runtimeDevice = $runtimeDevices | Where-Object {
+            $_.isSupported -and $_.targetPlatform -like "android-*" -and $_.emulator -and $_.id -match "^emulator-"
+        } | Select-Object -First 1
+        if ($runtimeDevice) { return $runtimeDevice.id }
+    }
+    throw "The Android emulator did not become ready within 60 seconds."
+}
+
 Write-Host "Vistora Mobile launcher" -ForegroundColor Cyan
 Write-Host "Checking connected devices..."
 $devices = @(Invoke-FlutterJson @("devices", "--machine"))
@@ -45,7 +62,7 @@ if ($connectedEmulators.Count -gt 0) {
     $selectedPhysicalDevice = $null
 
     if ($selection -match "^[Ee]$") {
-        $deviceId = "flutter_emulator"
+        $deviceId = Start-AndroidEmulator "flutter_emulator"
     } elseif ($selection -match "^\d+$" -and [int]$selection -ge 1 -and [int]$selection -le $physicalDevices.Count) {
         $selectedPhysicalDevice = $physicalDevices[[int]$selection - 1]
         $deviceId = $selectedPhysicalDevice.id
@@ -69,21 +86,7 @@ if ($connectedEmulators.Count -gt 0) {
     if (-not $deviceId) {
         throw "No wireless Android device or Android emulator was found. Create one with: flutter emulators --create"
     }
-    Write-Host "No wireless Android device found. Starting emulator '$deviceId'..." -ForegroundColor Yellow
-    & flutter emulators --launch $deviceId
-    if ($LASTEXITCODE -ne 0) { throw "Could not start emulator '$deviceId'." }
-    Write-Host "Waiting for the emulator to connect..."
-    $runtimeDeviceId = $null
-    for ($attempt = 1; $attempt -le 30 -and -not $runtimeDeviceId; $attempt++) {
-        Start-Sleep -Seconds 2
-        $runtimeDevices = @(Invoke-FlutterJson @("devices", "--machine"))
-        $runtimeDevice = $runtimeDevices | Where-Object {
-            $_.isSupported -and $_.targetPlatform -like "android-*" -and $_.id -match "^emulator-"
-        } | Select-Object -First 1
-        if ($runtimeDevice) { $runtimeDeviceId = $runtimeDevice.id }
-    }
-    if (-not $runtimeDeviceId) { throw "The Android emulator did not become ready within 60 seconds." }
-    $deviceId = $runtimeDeviceId
+    $deviceId = Start-AndroidEmulator $deviceId
 }
 
 if ([string]::IsNullOrWhiteSpace($ApiBaseUrl)) {
@@ -98,6 +101,18 @@ if ([string]::IsNullOrWhiteSpace($ApiBaseUrl)) {
         Write-Host "Using LAN API URL $ApiBaseUrl for the wireless device." -ForegroundColor Green
     } else {
         $ApiBaseUrl = "http://10.0.2.2:8000/api/v1"
+    }
+}
+
+# A physical device cannot reach an old/private address that is not assigned
+# to this development PC. Fail early with the current LAN address instead of
+# letting the app appear to hang on login.
+if ($ApiBaseUrl -match '^http://(?<host>\d{1,3}(?:\.\d{1,3}){3}):(?<port>\d+)/') {
+    $localAddresses = @(Get-NetIPAddress -AddressFamily IPv4 -PrefixOrigin Manual, Dhcp -ErrorAction SilentlyContinue |
+        Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254.*' } |
+        Select-Object -ExpandProperty IPAddress)
+    if ($localAddresses.Count -gt 0 -and $localAddresses -notcontains $Matches['host']) {
+        throw "API URL host $($Matches['host']) is not assigned to this PC. Use a current LAN URL such as http://$($localAddresses[0]):$($Matches['port'])/api/v1. Start Laravel with: php artisan serve --host=0.0.0.0 --port=$($Matches['port'])"
     }
 }
 

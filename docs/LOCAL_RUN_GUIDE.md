@@ -15,8 +15,11 @@ It performs this flow:
 
 The launcher uses `http://10.0.2.2:8000/api/v1` for an Android emulator. When a wireless Android device is selected, it automatically detects the PC's Wi-Fi IPv4 address and uses that LAN URL. You can also override it explicitly:
 
+Use the current IPv4 address of the development PC (it can change between
+networks), for example:
+
 ```powershell
-.\scripts\run_flutter.ps1 -ApiBaseUrl "http://192.168.1.25:8000/api/v1"
+.\scripts\run_flutter.ps1 -ApiBaseUrl "http://192.168.0.125:8000/api/v1"
 ```
 
 The Laravel development server must listen on the network interface, not only on loopback. Start it from the Laravel repository with:

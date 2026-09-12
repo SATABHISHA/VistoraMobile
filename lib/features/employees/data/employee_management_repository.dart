@@ -31,43 +31,11 @@ class EmployeeManagementRepository {
     );
   }
 
-  Future<void> create({
-    required String firstName,
-    required String lastName,
-    required String role,
-    String? workEmail,
-    String? mobile,
-  }) => _api.post(
-    '/employees',
-    data: {
-      'auto_emp_code': true,
-      'first_name': firstName.trim(),
-      'last_name': lastName.trim(),
-      'role_type': role,
-      if (workEmail?.trim().isNotEmpty == true) 'work_email': workEmail!.trim(),
-      if (mobile?.trim().isNotEmpty == true) 'mobile': mobile!.trim(),
-    },
-  );
+  Future<void> create(Map<String, dynamic> data) =>
+      _api.post('/employees', data: {'auto_emp_code': true, ...data});
 
-  Future<void> update({
-    required int id,
-    required String firstName,
-    required String lastName,
-    required String role,
-    String? workEmail,
-    String? mobile,
-  }) => _api.put(
-    '/employees/$id',
-    data: {
-      'first_name': firstName.trim(),
-      'last_name': lastName.trim(),
-      'role_type': role,
-      'work_email': workEmail?.trim().isEmpty == true
-          ? null
-          : workEmail?.trim(),
-      'mobile': mobile?.trim().isEmpty == true ? null : mobile?.trim(),
-    },
-  );
+  Future<void> update({required int id, required Map<String, dynamic> data}) =>
+      _api.put('/employees/$id', data: data);
 
   Future<void> setActive(ManagedEmployee employee, bool active) => _api.post(
     '/employees/${employee.id}/${active ? 'activate' : 'deactivate'}',
@@ -91,6 +59,7 @@ class EmployeeManagementRepository {
   Future<String> createInvitation({
     required String email,
     String? employeeName,
+    String validityType = '7-days',
   }) async {
     final response = await _api.post(
       '/employee-invitations',
@@ -98,7 +67,7 @@ class EmployeeManagementRepository {
         'email': email.trim(),
         if (employeeName?.trim().isNotEmpty == true)
           'employee_name': employeeName!.trim(),
-        'validity_type': '7-days',
+        'validity_type': validityType,
       },
     );
     return asMap(response['data'])['invitationUrl']?.toString() ?? '';

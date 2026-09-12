@@ -23,6 +23,14 @@ class TenantSettingsRepository {
     ).map((item) => MasterItem.fromJson(asMap(item))).toList();
   }
 
+  Future<List<String>> employmentTypes() async {
+    final response = await _api.get('/settings/employment-types');
+    return asList(asMap(response['data'])['items'])
+        .map((item) => item.toString().trim())
+        .where((item) => item.isNotEmpty)
+        .toList();
+  }
+
   Future<void> createMaster({
     required String type,
     required String name,
