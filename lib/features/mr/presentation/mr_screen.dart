@@ -283,7 +283,9 @@ class _RecordsViewState extends ConsumerState<_RecordsView> {
 
   Future<void> _refresh({bool resetPage = false}) async {
     if (resetPage) _page = 1;
-    setState(() => _future = _load());
+    setState(() {
+      _future = _load();
+    });
     await _future;
   }
 

@@ -11,15 +11,17 @@ class AttendanceRepository {
 
   Future<TodayAttendance> punch({
     required bool clockIn,
-    double? latitude,
-    double? longitude,
+    required double latitude,
+    required double longitude,
+    String? locationAddress,
     double? accuracyMeters,
   }) async {
     await _api.post(
       clockIn ? '/attendance/clock-in' : '/attendance/clock-out',
       data: {
-        'latitude': ?latitude,
-        'longitude': ?longitude,
+        'latitude': latitude,
+        'longitude': longitude,
+        'location_address': ?locationAddress,
         'accuracy_meters': ?accuracyMeters,
         'client_timestamp': DateTime.now().toUtc().toIso8601String(),
       },

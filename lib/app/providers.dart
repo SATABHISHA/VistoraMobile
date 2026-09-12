@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:vistora_mobile/app/config/app_environment.dart';
 import 'package:vistora_mobile/core/api/api_client.dart';
+import 'package:vistora_mobile/core/storage/login_identity_storage.dart';
 import 'package:vistora_mobile/core/storage/token_storage.dart';
 import 'package:vistora_mobile/features/auth/data/auth_repository.dart';
 
@@ -10,6 +11,10 @@ final environmentProvider = Provider<AppEnvironment>(
 
 final tokenStorageProvider = Provider<TokenStorage>(
   (ref) => SecureTokenStorage(),
+);
+
+final loginIdentityStorageProvider = Provider<LoginIdentityStorage>(
+  (ref) => SecureLoginIdentityStorage(),
 );
 
 final apiClientProvider = Provider<ApiClient>((ref) {

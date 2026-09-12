@@ -48,12 +48,26 @@ class AuthController extends Notifier<AuthState> {
     required String corpId,
     required String identity,
     required String password,
+    required bool rememberMe,
   }) async {
     state = const AuthState.authenticating();
     try {
       final session = await ref
           .read(authRepositoryProvider)
           .login(corpId: corpId, identity: identity, password: password);
+      try {
+        final rememberedLoginStorage = ref.read(loginIdentityStorageProvider);
+        if (rememberMe) {
+          await rememberedLoginStorage.write(
+            corpId: corpId,
+            identity: identity,
+          );
+        } else {
+          await rememberedLoginStorage.clear();
+        }
+      } catch (_) {
+        // A device-storage issue should not turn a valid sign-in into a failure.
+      }
       state = AuthState.authenticated(session);
       return true;
     } catch (error) {

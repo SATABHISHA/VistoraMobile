@@ -41,9 +41,13 @@ class _TenantSettingsScreenState extends ConsumerState<TenantSettingsScreen>
   final _smtpFromEmail = TextEditingController();
   final _smtpFromName = TextEditingController();
   final _smtpTest = TextEditingController();
+  final _geofenceSearch = TextEditingController();
 
   int _fiscalMonth = 4;
   bool _geofence = false;
+  bool _attendanceHoursVisibleToSelf = true;
+  List<GeofenceEmployee> _geofenceEmployees = const [];
+  Set<int> _restrictedEmployeeIds = {};
   String _encryption = 'tls';
   String _masterType = 'branches';
   late Future<List<MasterItem>> _masters;
@@ -80,6 +84,7 @@ class _TenantSettingsScreenState extends ConsumerState<TenantSettingsScreen>
       _smtpFromEmail,
       _smtpFromName,
       _smtpTest,
+      _geofenceSearch,
     ]) {
       controller.dispose();
     }
@@ -106,6 +111,9 @@ class _TenantSettingsScreenState extends ConsumerState<TenantSettingsScreen>
     _smtpFromName.text = value.smtpFromName;
     _fiscalMonth = value.fiscalYearStartMonth;
     _geofence = value.geofenceEnabled;
+    _attendanceHoursVisibleToSelf = value.attendanceHoursVisibleToSelf;
+    _geofenceEmployees = value.geofenceEmployees;
+    _restrictedEmployeeIds = value.geofenceEmployeeIds.toSet();
     _encryption = value.smtpEncryption;
   }
 
@@ -407,12 +415,25 @@ class _TenantSettingsScreenState extends ConsumerState<TenantSettingsScreen>
         value: _geofence,
         contentPadding: EdgeInsets.zero,
         title: const Text('Require office geofence'),
-        subtitle: const Text('Employees must check in within this boundary.'),
+        subtitle: const Text(
+          'When enabled, all employees must check in within this boundary. When disabled, only the selected employees below are restricted.',
+        ),
         onChanged: (value) => setState(() => _geofence = value),
       ),
+      SwitchListTile.adaptive(
+        value: _attendanceHoursVisibleToSelf,
+        contentPadding: EdgeInsets.zero,
+        title: const Text('Show employees’ and supervisors’ own worked hours'),
+        subtitle: const Text(
+          'When off, employees and supervisors cannot see their own total hours. Supervisors can still see subordinate totals, and HR/Admin always retain full attendance details.',
+        ),
+        onChanged: (value) =>
+            setState(() => _attendanceHoursVisibleToSelf = value),
+      ),
+      _geofenceEmployeePicker(),
       AnimatedSize(
         duration: const Duration(milliseconds: 220),
-        child: !_geofence
+        child: !_geofence && _restrictedEmployeeIds.isEmpty
             ? const SizedBox.shrink()
             : Column(
                 children: [
@@ -425,6 +446,8 @@ class _TenantSettingsScreenState extends ConsumerState<TenantSettingsScreen>
       _saveButton(
         () => _save({
           'geofence_enabled': _geofence,
+          'geofence_employee_ids': _restrictedEmployeeIds.toList(),
+          'attendance_hours_visible_to_self': _attendanceHoursVisibleToSelf,
           'office_latitude': _latitude.text.trim().isEmpty
               ? null
               : double.tryParse(_latitude.text),
@@ -432,10 +455,96 @@ class _TenantSettingsScreenState extends ConsumerState<TenantSettingsScreen>
               ? null
               : double.tryParse(_longitude.text),
           'geofence_radius_meters': int.tryParse(_radius.text) ?? 200,
-        }, 'Attendance boundary saved.'),
+        }, 'Attendance restrictions saved.'),
       ),
     ],
   );
+
+  Widget _geofenceEmployeePicker() {
+    final query = _geofenceSearch.text.trim().toLowerCase();
+    final filtered = _geofenceEmployees.where((employee) {
+      return '${employee.name} ${employee.code}'.toLowerCase().contains(query);
+    }).toList();
+    final selected = _geofenceEmployees
+        .where((employee) => _restrictedEmployeeIds.contains(employee.id))
+        .toList();
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Employees with geofence restrictions',
+              style: TextStyle(fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 5),
+            const Text(
+              'Search by employee ID or name. Select multiple employees; remove a chip or uncheck someone to revoke an individual restriction.',
+              style: TextStyle(color: VistoraColors.muted, fontSize: 12),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _geofenceSearch,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                prefixIcon: Icon(Icons.search),
+                labelText: 'Search employee ID or name',
+              ),
+            ),
+            if (selected.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: selected
+                    .map(
+                      (employee) => InputChip(
+                        label: Text('${employee.name} · ${employee.code}'),
+                        onDeleted: () => setState(
+                          () => _restrictedEmployeeIds.remove(employee.id),
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ],
+            const SizedBox(height: 8),
+            if (filtered.isEmpty)
+              const Padding(
+                padding: EdgeInsets.all(18),
+                child: Text('No employees match this search.'),
+              )
+            else
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 300),
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: filtered.length,
+                  itemBuilder: (context, index) {
+                    final employee = filtered[index];
+                    return CheckboxListTile(
+                      value: _restrictedEmployeeIds.contains(employee.id),
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(employee.name),
+                      subtitle: Text('${employee.code} · ${employee.status}'),
+                      onChanged: (selected) => setState(() {
+                        if (selected == true) {
+                          _restrictedEmployeeIds.add(employee.id);
+                        } else {
+                          _restrictedEmployeeIds.remove(employee.id);
+                        }
+                      }),
+                    );
+                  },
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 
   Widget _smtpTab() => _SettingsList(
     children: [

@@ -223,7 +223,9 @@ class _DoctorEditorState extends ConsumerState<_DoctorEditor> {
   Future<void> _createLocation() async {
     final created = await showMrLocationEditor(context);
     if (!created || !mounted) return;
-    setState(() => _choices = _loadChoices());
+    setState(() {
+      _choices = _loadChoices();
+    });
   }
 
   Future<void> _save(int limit) async {
@@ -283,7 +285,9 @@ class _DoctorEditorState extends ConsumerState<_DoctorEditor> {
         if (snapshot.hasError) {
           return _InlineError(
             error: snapshot.error!,
-            onRetry: () => setState(() => _choices = _loadChoices()),
+            onRetry: () => setState(() {
+              _choices = _loadChoices();
+            }),
           );
         }
         final choices = snapshot.requireData;
@@ -826,7 +830,9 @@ class _AssignmentEditorState extends ConsumerState<_AssignmentEditor> {
         if (snapshot.hasError) {
           return _InlineError(
             error: snapshot.error!,
-            onRetry: () => setState(() => _choices = _loadChoices()),
+            onRetry: () => setState(() {
+              _choices = _loadChoices();
+            }),
           );
         }
         final choices = snapshot.requireData;

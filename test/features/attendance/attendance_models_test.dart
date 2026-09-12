@@ -7,6 +7,7 @@ void main() {
       'data': {
         'canClockIn': false,
         'canClockOut': true,
+        'canViewWorkedHours': false,
         'serverTime': '2026-08-21T10:00:00+05:30',
         'geofence': {'enabled': true, 'radius_meters': 200},
         'attendance': {
@@ -21,6 +22,7 @@ void main() {
     });
 
     expect(value.canClockOut, isTrue);
+    expect(value.canViewWorkedHours, isFalse);
     expect(value.geofence.enabled, isTrue);
     expect(value.attendance?.id, 8);
     expect(value.attendance?.workedMinutes, 125);
@@ -37,6 +39,7 @@ void main() {
             'weekday': 'Thu',
             'status': 'present',
             'worked_minutes': 480,
+            'can_view_worked_hours': false,
           },
         ],
         'summary': {'present': 1},
@@ -44,6 +47,7 @@ void main() {
     });
 
     expect(value.days.single.id, 44);
+    expect(value.days.single.canViewWorkedHours, isFalse);
     expect(value.summary['present'], 1);
   });
 
@@ -62,9 +66,13 @@ void main() {
             },
             'status': 'present',
             'worked_minutes': 410,
+            'can_view_worked_hours': true,
             'latitude': 22.5726,
             'longitude': 88.3639,
             'location_address': 'Kolkata office',
+            'check_out_latitude': '22.5730',
+            'check_out_longitude': '88.3642',
+            'check_out_location_address': 'Kolkata office exit',
             'is_live': true,
           },
         ],
@@ -75,6 +83,9 @@ void main() {
     expect(value.items.single.employeeName, 'Asha Roy');
     expect(value.items.single.employeeCode, 'EMP009');
     expect(value.items.single.locationAddress, 'Kolkata office');
+    expect(value.items.single.checkOutLatitude, 22.5730);
+    expect(value.items.single.checkOutLocationAddress, 'Kolkata office exit');
     expect(value.items.single.isLive, isTrue);
+    expect(value.items.single.canViewWorkedHours, isTrue);
   });
 }

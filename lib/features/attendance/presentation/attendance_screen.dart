@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -17,8 +19,11 @@ class AttendanceScreen extends ConsumerStatefulWidget {
   ConsumerState<AttendanceScreen> createState() => _AttendanceScreenState();
 }
 
-class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
+class _AttendanceScreenState extends ConsumerState<AttendanceScreen>
+    with WidgetsBindingObserver {
   late DateTime _month;
+  late DateTime _activeDay;
+  Timer? _dayRolloverTimer;
   bool _punching = false;
 
   @override
@@ -26,6 +31,49 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
     super.initState();
     final now = DateTime.now();
     _month = DateTime(now.year, now.month);
+    _activeDay = DateTime(now.year, now.month, now.day);
+    WidgetsBinding.instance.addObserver(this);
+    _scheduleDayRollover();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed || !mounted) return;
+    _refreshAttendanceForCurrentDay();
+    _scheduleDayRollover();
+  }
+
+  void _refreshAttendanceForCurrentDay() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    if (today != _activeDay) {
+      final wasShowingCurrentMonth =
+          _month.year == _activeDay.year && _month.month == _activeDay.month;
+      setState(() {
+        _activeDay = today;
+        if (wasShowingCurrentMonth) {
+          _month = DateTime(today.year, today.month);
+        }
+      });
+    }
+    ref.invalidate(todayAttendanceProvider);
+    ref.invalidate(
+      attendanceCalendarProvider(AttendanceMonth(_month.year, _month.month)),
+    );
+  }
+
+  void _scheduleDayRollover() {
+    _dayRolloverTimer?.cancel();
+    final now = DateTime.now();
+    final nextDay = DateTime(now.year, now.month, now.day + 1);
+    _dayRolloverTimer = Timer(
+      nextDay.difference(now) + const Duration(seconds: 1),
+      () {
+        if (!mounted) return;
+        _refreshAttendanceForCurrentDay();
+        _scheduleDayRollover();
+      },
+    );
   }
 
   Future<void> _refresh() async {
@@ -36,17 +84,25 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
     await ref.read(todayAttendanceProvider.future);
   }
 
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _dayRolloverTimer?.cancel();
+    super.dispose();
+  }
+
   Future<void> _punch(TodayAttendance today) async {
     final clockIn = today.canClockIn;
     final action = clockIn ? 'clock in' : 'clock out';
+    final geofenceDisclosure = today.geofence.enabled
+        ? ' The location will also be checked against your company geofence.'
+        : '';
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Confirm ${clockIn ? 'Clock In' : 'Clock Out'}'),
         content: Text(
-          today.geofence.enabled
-              ? 'Your current location will be sent securely to Vistora for server-side geofence validation.'
-              : 'Record your attendance now?',
+          'Vistora will capture your precise current location only for this attendance punch. Your device’s built-in address service may use the coordinates to resolve an address. Coordinates and any resolved address will be sent to Vistora, saved with the record, and visible to your tenant HR/Admin and, where applicable, your supervisor. No background location tracking is used.$geofenceDisclosure',
         ),
         actions: [
           TextButton(
@@ -63,24 +119,17 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
     if (confirmed != true || !mounted) return;
     setState(() => _punching = true);
     try {
-      double? latitude;
-      double? longitude;
-      double? accuracy;
-      if (today.geofence.enabled) {
-        final position = await ref
-            .read(locationServiceProvider)
-            .currentPosition();
-        latitude = position.latitude;
-        longitude = position.longitude;
-        accuracy = position.accuracy;
-      }
+      final location = await ref
+          .read(locationServiceProvider)
+          .currentAttendanceLocation();
       await ref
           .read(attendanceRepositoryProvider)
           .punch(
             clockIn: clockIn,
-            latitude: latitude,
-            longitude: longitude,
-            accuracyMeters: accuracy,
+            latitude: location.latitude,
+            longitude: location.longitude,
+            locationAddress: location.address,
+            accuracyMeters: location.accuracyMeters,
           );
       ref.invalidate(todayAttendanceProvider);
       ref.invalidate(
@@ -291,16 +340,14 @@ class _TodayCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 10),
                   Text(
-                    'In ${_time(record?.checkInAt)}  •  Out ${_time(record?.checkOutAt)}  •  Worked ${_duration(record?.workedMinutes ?? 0)}',
+                    'In ${_time(record?.checkInAt)}  •  Out ${_time(record?.checkOutAt)}${value.canViewWorkedHours ? '  •  Worked ${_duration(record?.workedMinutes ?? 0)}' : ''}',
                   ),
                   const SizedBox(height: 8),
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        value.geofence.enabled
-                            ? Icons.location_on_outlined
-                            : Icons.location_off_outlined,
+                        Icons.my_location_outlined,
                         size: 17,
                         color: VistoraColors.cyan,
                       ),
@@ -308,8 +355,8 @@ class _TodayCard extends StatelessWidget {
                       Flexible(
                         child: Text(
                           value.geofence.enabled
-                              ? 'Company geofence validation enabled'
-                              : 'Geofence validation is not required',
+                              ? 'Location captured; office boundary enforced'
+                              : 'Location captured; office boundary not enforced',
                           style: const TextStyle(
                             color: VistoraColors.cyan,
                             fontSize: 12,
@@ -508,15 +555,17 @@ class _DayTiming extends StatelessWidget {
           label: 'Out',
           value: _time(day.checkOutAt),
         ),
-        const SizedBox(height: 4),
-        Text(
-          'Total ${_duration(day.workedMinutes)}',
-          style: const TextStyle(
-            color: VistoraColors.green,
-            fontSize: 11,
-            fontWeight: FontWeight.w900,
+        if (day.canViewWorkedHours) ...[
+          const SizedBox(height: 4),
+          Text(
+            'Total ${_duration(day.workedMinutes)}',
+            style: const TextStyle(
+              color: VistoraColors.green,
+              fontSize: 11,
+              fontWeight: FontWeight.w900,
+            ),
           ),
-        ),
+        ],
       ],
     ),
   );

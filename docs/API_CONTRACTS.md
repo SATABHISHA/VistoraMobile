@@ -54,11 +54,12 @@ All endpoints are relative to the configured `/api/v1` base URL.
 ### POST `/attendance/clock-out`
 
 - Authentication: Sanctum and tenant context
-- Body: optional `latitude`, `longitude`, `accuracy_meters`, `client_timestamp`; coordinates are required when the tenant geofence is enabled
+- Body: `latitude`, `longitude`, optional `accuracy_meters`, `location_address`, `client_timestamp`; coordinates are required for every punch regardless of geofence state
 - Authorization: always operates on the employee linked to the authenticated user
 - Server authority: Laravel validates tenant geofence configuration and calculates distance
 - Errors: 422 missing location, outside geofence, duplicate punch or invalid punch sequence
-- Flutter: location is requested only when the returned geofence is enabled
+- Flutter: after an in-app disclosure/confirmation, request a precise foreground location and ask the Android/iOS native geocoder for a readable address. The app submits the coordinates and any returned address; address lookup failure never blocks a punch. No background location is used. The native geocoding service may process coordinates according to the device platform's service terms.
+- Browser UI: browser geolocation supplies coordinates only; no external reverse-geocoding provider is configured. Laravel saves coordinates and any optional `location_address` provided by a client.
 
 ### GET `/attendance/calendar`
 

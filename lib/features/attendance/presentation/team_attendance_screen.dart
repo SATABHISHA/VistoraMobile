@@ -9,6 +9,7 @@ import 'package:vistora_mobile/core/widgets/responsive_center.dart';
 import 'package:vistora_mobile/features/attendance/domain/attendance_models.dart';
 import 'package:vistora_mobile/features/attendance/presentation/attendance_providers.dart';
 import 'package:vistora_mobile/features/auth/presentation/auth_controller.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class TeamAttendanceScreen extends ConsumerStatefulWidget {
   const TeamAttendanceScreen({this.initialQuery, super.key});
@@ -280,112 +281,214 @@ class _RosterContent extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 14),
-        TweenAnimationBuilder<double>(
-          duration: const Duration(milliseconds: 360),
-          tween: Tween(begin: 0, end: 1),
-          builder: (context, value, child) => Transform.translate(
-            offset: Offset(0, 14 * (1 - value)),
-            child: Opacity(opacity: value, child: child),
-          ),
-          child: Card(
-            clipBehavior: Clip.antiAlias,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: DataTable(
-                headingRowColor: WidgetStatePropertyAll(
-                  VistoraColors.cyan.withValues(alpha: .08),
-                ),
-                dataRowMinHeight: 68,
-                dataRowMaxHeight: 78,
-                columns: const [
-                  DataColumn(label: Text('EMPLOYEE')),
-                  DataColumn(label: Text('STATUS')),
-                  DataColumn(label: Text('CLOCK IN')),
-                  DataColumn(label: Text('CLOCK OUT')),
-                  DataColumn(label: Text('WORKED')),
-                  DataColumn(label: Text('LOCATION')),
-                  DataColumn(label: Text('DETAILS')),
-                ],
-                rows: items.map((item) => _row(context, item)).toList(),
-              ),
-            ),
-          ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final item in items) ...[
+              _RosterAttendanceCard(item: item, onTap: () => onOpen(item)),
+              const SizedBox(height: 10),
+            ],
+          ],
         ),
       ],
     );
   }
+}
 
-  DataRow _row(BuildContext context, AttendanceRosterItem item) => DataRow(
-    onSelectChanged: (_) => onOpen(item),
-    cells: [
-      DataCell(
-        SizedBox(
-          width: 210,
-          child: Row(
+class _RosterAttendanceCard extends StatelessWidget {
+  const _RosterAttendanceCard({required this.item, required this.onTap});
+
+  final AttendanceRosterItem item;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _statusColor(item.status);
+    return Card(
+      margin: EdgeInsets.zero,
+      color: VistoraColors.surface,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(19),
+        side: const BorderSide(color: Color(0xFF29334D)),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(15),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: const [
+                Color(0xFF18223A),
+                Color(0xFF11182B),
+                VistoraColors.surface,
+              ],
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              CircleAvatar(
-                backgroundColor: VistoraColors.cyan.withValues(alpha: .12),
-                child: Text(
-                  _initials(item.employeeName),
-                  style: const TextStyle(
-                    color: VistoraColors.cyan,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.employeeName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.w900),
-                    ),
-                    Text(
-                      item.employeeCode,
-                      style: const TextStyle(
-                        color: VistoraColors.muted,
-                        fontSize: 11,
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CircleAvatar(
+                    radius: 22,
+                    backgroundColor: color.withValues(alpha: .14),
+                    child: Text(
+                      _initials(item.employeeName),
+                      style: TextStyle(
+                        color: color,
+                        fontWeight: FontWeight.w900,
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: 11),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item.employeeName,
+                            softWrap: true,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          if (item.employeeCode.trim().isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              item.employeeCode,
+                              style: const TextStyle(
+                                color: VistoraColors.muted,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  _StatusPill(item.status, live: item.isLive),
+                ],
+              ),
+              const SizedBox(height: 13),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _AttendanceFact(
+                    icon: Icons.login_rounded,
+                    label: 'Clock in',
+                    value: _time(item.checkInAt),
+                    color: VistoraColors.cyan,
+                  ),
+                  _AttendanceFact(
+                    icon: Icons.logout_rounded,
+                    label: 'Clock out',
+                    value: _time(item.checkOutAt),
+                    color: VistoraColors.orange,
+                  ),
+                  if (item.canViewWorkedHours)
+                    _AttendanceFact(
+                      icon: Icons.timelapse_rounded,
+                      label: 'Worked',
+                      value: _duration(item.workedMinutes),
+                      color: VistoraColors.green,
+                    ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  const Icon(
+                    Icons.touch_app_outlined,
+                    size: 17,
+                    color: VistoraColors.muted,
+                  ),
+                  const SizedBox(width: 6),
+                  const Expanded(
+                    child: Text(
+                      'Tap to view attendance details',
+                      style: TextStyle(
+                        color: VistoraColors.muted,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  const Icon(
+                    Icons.arrow_forward_rounded,
+                    size: 18,
+                    color: VistoraColors.muted,
+                  ),
+                ],
               ),
             ],
           ),
         ),
       ),
-      DataCell(_StatusPill(item.status, live: item.isLive)),
-      DataCell(Text(_time(item.checkInAt))),
-      DataCell(Text(_time(item.checkOutAt))),
-      DataCell(
-        Text(
-          _duration(item.workedMinutes),
-          style: const TextStyle(fontWeight: FontWeight.w800),
+    );
+  }
+}
+
+class _AttendanceFact extends StatelessWidget {
+  const _AttendanceFact({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    constraints: const BoxConstraints(minWidth: 104),
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: .08),
+      borderRadius: BorderRadius.circular(13),
+      border: Border.all(color: color.withValues(alpha: .24)),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 17, color: color),
+        const SizedBox(width: 7),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label.toUpperCase(),
+              style: TextStyle(
+                color: color.withValues(alpha: .9),
+                fontSize: 9,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              value,
+              softWrap: true,
+              style: const TextStyle(
+                color: VistoraColors.text,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
         ),
-      ),
-      DataCell(
-        SizedBox(
-          width: 220,
-          child: Text(
-            _location(item),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ),
-      DataCell(
-        IconButton.filledTonal(
-          tooltip: 'Open monthly attendance',
-          onPressed: () => onOpen(item),
-          icon: const Icon(Icons.arrow_forward),
-        ),
-      ),
-    ],
+      ],
+    ),
   );
 }
 
@@ -487,10 +590,26 @@ class _AttendanceDetailsState extends ConsumerState<_AttendanceDetails> {
               _DetailMetric('Status', _label(widget.item.status)),
               _DetailMetric('Clock in', _time(widget.item.checkInAt)),
               _DetailMetric('Clock out', _time(widget.item.checkOutAt)),
-              _DetailMetric('Worked', _duration(widget.item.workedMinutes)),
+              if (widget.item.canViewWorkedHours)
+                _DetailMetric('Worked', _duration(widget.item.workedMinutes)),
               SizedBox(
-                width: 280,
-                child: _DetailMetric('Location', _location(widget.item)),
+                width: 300,
+                child: _PunchLocationLine(
+                  label: 'Clock-in location / address',
+                  latitude: widget.item.latitude,
+                  longitude: widget.item.longitude,
+                  address: widget.item.locationAddress,
+                ),
+              ),
+              SizedBox(
+                width: 300,
+                child: _PunchLocationLine(
+                  label: 'Clock-out location / address',
+                  latitude: widget.item.checkOutLatitude,
+                  longitude: widget.item.checkOutLongitude,
+                  address: widget.item.checkOutLocationAddress,
+                  muted: true,
+                ),
               ),
             ],
           ),
@@ -553,57 +672,14 @@ class _AttendanceDetailsState extends ConsumerState<_AttendanceDetails> {
                       .toList(),
                 ),
                 const SizedBox(height: 12),
-                Card(
-                  clipBehavior: Clip.antiAlias,
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: DataTable(
-                      headingRowColor: WidgetStatePropertyAll(
-                        VistoraColors.orange.withValues(alpha: .09),
-                      ),
-                      columns: const [
-                        DataColumn(label: Text('DATE')),
-                        DataColumn(label: Text('STATUS')),
-                        DataColumn(label: Text('CLOCK IN')),
-                        DataColumn(label: Text('CLOCK OUT')),
-                        DataColumn(label: Text('TOTAL HOURS')),
-                      ],
-                      rows: calendar.days
-                          .map(
-                            (day) => DataRow(
-                              cells: [
-                                DataCell(
-                                  SizedBox(
-                                    width: 115,
-                                    child: Text(
-                                      DateFormat(
-                                        'dd MMM, EEE',
-                                      ).format(day.date),
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w800,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                DataCell(
-                                  _StatusPill(day.status ?? 'not recorded'),
-                                ),
-                                DataCell(Text(_time(day.checkInAt))),
-                                DataCell(Text(_time(day.checkOutAt))),
-                                DataCell(
-                                  Text(
-                                    _duration(day.workedMinutes),
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          )
-                          .toList(),
-                    ),
-                  ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (final day in calendar.days) ...[
+                      _AttendanceDayCard(day: day),
+                      const SizedBox(height: 9),
+                    ],
+                  ],
                 ),
               ],
             );
@@ -612,6 +688,113 @@ class _AttendanceDetailsState extends ConsumerState<_AttendanceDetails> {
       ],
     ),
   );
+}
+
+class _AttendanceDayCard extends StatelessWidget {
+  const _AttendanceDayCard({required this.day});
+
+  final AttendanceDay day;
+
+  @override
+  Widget build(BuildContext context) {
+    final status = day.status ?? 'not recorded';
+    final color = _statusColor(status);
+    return Card(
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(17),
+        side: BorderSide(color: color.withValues(alpha: .22)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        DateFormat('EEE, dd MMM yyyy').format(day.date),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 14,
+                        ),
+                      ),
+                      if (day.leaveName?.trim().isNotEmpty == true) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          day.leaveName!,
+                          style: const TextStyle(
+                            color: VistoraColors.muted,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                _StatusPill(status),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _AttendanceFact(
+                  icon: Icons.login_rounded,
+                  label: 'Clock in',
+                  value: _time(day.checkInAt),
+                  color: VistoraColors.cyan,
+                ),
+                _AttendanceFact(
+                  icon: Icons.logout_rounded,
+                  label: 'Clock out',
+                  value: _time(day.checkOutAt),
+                  color: VistoraColors.orange,
+                ),
+                if (day.canViewWorkedHours)
+                  _AttendanceFact(
+                    icon: Icons.timelapse_rounded,
+                    label: 'Worked',
+                    value: _duration(day.workedMinutes),
+                    color: VistoraColors.green,
+                  ),
+              ],
+            ),
+            if (day.latitude != null ||
+                day.longitude != null ||
+                day.locationAddress?.trim().isNotEmpty == true ||
+                day.checkOutLatitude != null ||
+                day.checkOutLongitude != null ||
+                day.checkOutLocationAddress?.trim().isNotEmpty == true) ...[
+              const SizedBox(height: 12),
+              Divider(color: VistoraColors.muted.withValues(alpha: .18)),
+              _PunchLocationLine(
+                label: 'Clock-in location / address',
+                latitude: day.latitude,
+                longitude: day.longitude,
+                address: day.locationAddress,
+              ),
+              const SizedBox(height: 8),
+              _PunchLocationLine(
+                label: 'Clock-out location / address',
+                latitude: day.checkOutLatitude,
+                longitude: day.checkOutLongitude,
+                address: day.checkOutLocationAddress,
+                muted: true,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _SummaryChip extends StatelessWidget {
@@ -708,6 +891,101 @@ class _DetailMetric extends StatelessWidget {
   );
 }
 
+class _PunchLocationLine extends StatelessWidget {
+  const _PunchLocationLine({
+    required this.label,
+    required this.latitude,
+    required this.longitude,
+    required this.address,
+    this.muted = false,
+  });
+
+  final String label;
+  final double? latitude;
+  final double? longitude;
+  final String? address;
+  final bool muted;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasAddress = address?.trim().isNotEmpty == true;
+    final hasCoordinates = _hasValidCoordinates(latitude, longitude);
+    final color = muted ? VistoraColors.muted : null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text.rich(
+          TextSpan(
+            children: [
+              TextSpan(
+                text: '$label: ',
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+              TextSpan(text: _punchLocation(latitude, longitude, address)),
+            ],
+          ),
+          softWrap: true,
+          style: TextStyle(color: color, fontSize: muted ? 11 : 12),
+        ),
+        if (!hasAddress && hasCoordinates)
+          TextButton.icon(
+            onPressed: () =>
+                _openCoordinatesInMap(context, latitude!, longitude!),
+            style: TextButton.styleFrom(
+              padding: EdgeInsets.zero,
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              alignment: Alignment.centerLeft,
+            ),
+            icon: const Icon(Icons.map_outlined, size: 15),
+            label: const Text('Open in map', style: TextStyle(fontSize: 11)),
+          ),
+      ],
+    );
+  }
+}
+
+bool _hasValidCoordinates(double? latitude, double? longitude) =>
+    latitude != null &&
+    longitude != null &&
+    latitude.isFinite &&
+    longitude.isFinite &&
+    latitude.abs() <= 90 &&
+    longitude.abs() <= 180;
+
+Future<void> _openCoordinatesInMap(
+  BuildContext context,
+  double latitude,
+  double longitude,
+) async {
+  if (!_hasValidCoordinates(latitude, longitude)) return;
+  final uri = Uri.https('www.google.com', '/maps/search/', {
+    'api': '1',
+    'query': '${latitude.toStringAsFixed(6)},${longitude.toStringAsFixed(6)}',
+  });
+
+  try {
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not open the map for this location.'),
+        ),
+      );
+    }
+  } catch (_) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not open the map for this location.'),
+        ),
+      );
+    }
+  }
+}
+
 Color _statusColor(String value) => switch (value.toLowerCase()) {
   'present' || 'working' || 'completed' => VistoraColors.green,
   'absent' || 'not recorded' => VistoraColors.pink,
@@ -717,11 +995,11 @@ Color _statusColor(String value) => switch (value.toLowerCase()) {
   _ => VistoraColors.muted,
 };
 
-String _location(AttendanceRosterItem item) =>
-    item.locationAddress ??
-    (item.latitude == null
-        ? 'Not available'
-        : '${item.latitude!.toStringAsFixed(5)}, ${item.longitude!.toStringAsFixed(5)}');
+String _punchLocation(double? latitude, double? longitude, String? address) {
+  if (address?.trim().isNotEmpty == true) return address!.trim();
+  if (latitude == null || longitude == null) return 'Not captured';
+  return '${latitude.toStringAsFixed(6)}, ${longitude.toStringAsFixed(6)} · address not available';
+}
 
 String _time(DateTime? value) =>
     value == null ? '—' : DateFormat.jm().format(value);

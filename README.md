@@ -39,11 +39,16 @@ it explicitly for a release build:
 flutter build ios --release --no-codesign --dart-define=APP_ENV=production --dart-define=API_BASE_URL=https://vistora.ahanova.in/api/v1
 ```
 
-Physical device on the same LAN:
+Physical Android device over USB or Wireless Debugging (the launcher sets up
+`adb reverse`; the local Laravel server can stay on `127.0.0.1`):
 
 ```text
-flutter run --dart-define=APP_ENV=local --dart-define=API_BASE_URL=http://YOUR_PC_LAN_IP:8000/api/v1
+adb -s DEVICE_ID reverse tcp:8000 tcp:8000
+flutter run -d DEVICE_ID --dart-define=APP_ENV=local --dart-define=API_BASE_URL=http://127.0.0.1:8000/api/v1
 ```
+
+For the device-selection launcher and network troubleshooting, see
+[docs/LOCAL_RUN_GUIDE.md](docs/LOCAL_RUN_GUIDE.md).
 
 Staging or production:
 

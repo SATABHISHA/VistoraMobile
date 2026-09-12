@@ -35,10 +35,8 @@
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Allow Flutter debugging tools to connect to Vistora Mobile on the local network.</string>
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Vistora uses location only for attendance geofence validation when you clock in or clock out.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Vistora uses your location when you clock in or clock out to validate the company attendance geofence.</string>
+	<string>Vistora captures your precise location only when you confirm an attendance punch. The device address service may resolve a readable address for that punch. Location is never tracked in the background.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Vistora lets you choose photos or images when uploading approved employee, billing, or document files.</string>
 	<key>UILaunchStoryboardName</key>

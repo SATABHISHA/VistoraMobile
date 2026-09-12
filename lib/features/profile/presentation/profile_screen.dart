@@ -5,6 +5,7 @@ import 'package:vistora_mobile/app/providers.dart';
 import 'package:vistora_mobile/core/errors/app_exception.dart';
 import 'package:vistora_mobile/core/widgets/responsive_center.dart';
 import 'package:vistora_mobile/features/auth/presentation/auth_controller.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -166,6 +167,18 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ),
             ),
             const SizedBox(height: 16),
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.privacy_tip_outlined),
+                title: const Text('Privacy policy'),
+                subtitle: const Text(
+                  'How Vistora handles account and location data',
+                ),
+                trailing: const Icon(Icons.open_in_new),
+                onTap: _openPrivacyPolicy,
+              ),
+            ),
+            const SizedBox(height: 16),
             OutlinedButton.icon(
               onPressed: _confirmLogout,
               icon: const Icon(Icons.logout),
@@ -175,6 +188,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _openPrivacyPolicy() async {
+    final uri = Uri.parse('https://vistora.ahanova.in/privacy-policy');
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication) &&
+        mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open the privacy policy.')),
+      );
+    }
   }
 
   Future<void> _confirmLogout() async {

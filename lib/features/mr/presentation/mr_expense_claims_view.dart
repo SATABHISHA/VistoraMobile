@@ -64,7 +64,9 @@ class _MrExpenseClaimsViewState extends ConsumerState<MrExpenseClaimsView> {
 
   Future<void> _refresh({bool resetPage = false}) async {
     if (resetPage) _page = 1;
-    setState(() => _future = _load());
+    setState(() {
+      _future = _load();
+    });
     await _future;
   }
 

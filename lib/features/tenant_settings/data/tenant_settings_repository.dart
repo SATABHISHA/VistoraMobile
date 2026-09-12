@@ -8,12 +8,21 @@ class TenantSettingsRepository {
 
   Future<TenantSettings> settings() async {
     final response = await _api.get('/settings/tenant');
-    return TenantSettings.fromJson(asMap(asMap(response['data'])['tenant']));
+    return _parseSettings(response);
   }
 
   Future<TenantSettings> update(Map<String, dynamic> data) async {
     final response = await _api.put('/settings/tenant', data: data);
-    return TenantSettings.fromJson(asMap(asMap(response['data'])['tenant']));
+    return _parseSettings(response);
+  }
+
+  TenantSettings _parseSettings(Map<String, dynamic> response) {
+    final data = asMap(response['data']);
+    return TenantSettings.fromJson({
+      ...asMap(data['tenant']),
+      'geofence_employee_ids': data['geofence_employee_ids'],
+      'geofence_employees': data['geofence_employees'],
+    });
   }
 
   Future<List<MasterItem>> masters(String type) async {

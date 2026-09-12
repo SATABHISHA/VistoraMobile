@@ -18,6 +18,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _identityController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscure = true;
+  bool _rememberMe = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _restoreRememberedLogin();
+  }
+
+  Future<void> _restoreRememberedLogin() async {
+    try {
+      final remembered = await ref.read(loginIdentityStorageProvider).read();
+      if (!mounted || remembered == null) return;
+      if (_corpController.text.trim().isEmpty &&
+          _identityController.text.trim().isEmpty) {
+        _corpController.text = remembered.corpId;
+        _identityController.text = remembered.identity;
+      }
+    } catch (_) {
+      // Keep the login form usable even if secure storage is unavailable.
+    }
+  }
 
   @override
   void dispose() {
@@ -36,6 +57,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           corpId: _corpController.text.trim().toUpperCase(),
           identity: _identityController.text.trim(),
           password: _passwordController.text,
+          rememberMe: _rememberMe,
         );
   }
 
@@ -162,6 +184,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                           value == null || value.length < 8
                                           ? 'Password must contain at least 8 characters.'
                                           : null,
+                                    ),
+                                    CheckboxListTile(
+                                      value: _rememberMe,
+                                      onChanged: loading
+                                          ? null
+                                          : (value) => setState(
+                                              () =>
+                                                  _rememberMe = value ?? false,
+                                            ),
+                                      contentPadding: EdgeInsets.zero,
+                                      controlAffinity:
+                                          ListTileControlAffinity.leading,
+                                      title: const Text('Remember me'),
+                                      subtitle: const Text(
+                                        'Save your corporate ID and username on this device.',
+                                      ),
                                     ),
                                     if (auth.errorMessage != null) ...[
                                       const SizedBox(height: 14),

@@ -16,6 +16,30 @@ function Invoke-FlutterJson([string[]]$Arguments) {
     return ($json -join "`n" | ConvertFrom-Json)
 }
 
+function Get-AdbExecutable {
+    $configuration = & flutter config --machine
+    if ($LASTEXITCODE -eq 0) {
+        $androidSdk = ($configuration -join "`n" | ConvertFrom-Json).'android-sdk'
+        if ($androidSdk) {
+            $configuredAdb = Join-Path $androidSdk 'platform-tools\adb.exe'
+            if (Test-Path -LiteralPath $configuredAdb) { return $configuredAdb }
+        }
+    }
+
+    $adbCommand = Get-Command adb -ErrorAction SilentlyContinue
+    if ($adbCommand) { return $adbCommand.Source }
+    throw "Could not find adb.exe. Check the Android SDK platform-tools installation."
+}
+
+function Enable-PhysicalDeviceApiTunnel([string]$DeviceId, [int]$Port) {
+    $adb = Get-AdbExecutable
+    & $adb -s $DeviceId reverse "tcp:$Port" "tcp:$Port"
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not forward device port $Port to this PC. Keep the device connected with USB or Wireless Debugging and run: adb -s $DeviceId reverse tcp:$Port tcp:$Port"
+    }
+    Write-Host "Forwarded physical-device localhost:$Port to this PC." -ForegroundColor Green
+}
+
 function Start-AndroidEmulator([string]$EmulatorId) {
     Write-Host "Starting Android emulator '$EmulatorId'..." -ForegroundColor Yellow
     & flutter emulators --launch $EmulatorId
@@ -45,31 +69,36 @@ $physicalDevices = @($devices | Where-Object {
 $connectedEmulators = @($devices | Where-Object {
     $_.isSupported -and $_.targetPlatform -like "android-*" -and $_.emulator
 })
-$usingWirelessDevice = $false
+$selectedPhysicalDevice = $null
 
-if ($connectedEmulators.Count -gt 0) {
-    # Reuse an emulator that is already running instead of launching a second
-    # instance of the configured AVD (which can fail with exit code 1).
-    $deviceId = $connectedEmulators[0].id
-    Write-Host "Using connected Android emulator '$deviceId'." -ForegroundColor Green
-} elseif ($physicalDevices.Count -gt 0) {
+if ($physicalDevices.Count -gt 0) {
     Write-Host "Physical Android device(s) found:" -ForegroundColor Green
     for ($i = 0; $i -lt $physicalDevices.Count; $i++) {
         Write-Host ("  [{0}] {1} ({2})" -f ($i + 1), $physicalDevices[$i].name, $physicalDevices[$i].id)
     }
-    Write-Host "  [E] Start Android emulator"
+    if ($connectedEmulators.Count -gt 0) {
+        Write-Host ("  [E] Use connected Android emulator ({0})" -f $connectedEmulators[0].name)
+    } else {
+        Write-Host "  [E] Start Android emulator"
+    }
     $selection = Read-Host "Choose a device"
-    $selectedPhysicalDevice = $null
-
     if ($selection -match "^[Ee]$") {
-        $deviceId = Start-AndroidEmulator "flutter_emulator"
+        if ($connectedEmulators.Count -gt 0) {
+            $deviceId = $connectedEmulators[0].id
+        } else {
+            $deviceId = Start-AndroidEmulator "flutter_emulator"
+        }
     } elseif ($selection -match "^\d+$" -and [int]$selection -ge 1 -and [int]$selection -le $physicalDevices.Count) {
         $selectedPhysicalDevice = $physicalDevices[[int]$selection - 1]
         $deviceId = $selectedPhysicalDevice.id
     } else {
         throw "Invalid selection. Run the script again and choose one of the listed options."
     }
-    $usingWirelessDevice = $selectedPhysicalDevice -and $selectedPhysicalDevice.id -match ":\d+$|(?i)wireless|adb[- ]?wifi"
+} elseif ($connectedEmulators.Count -gt 0) {
+    # Reuse an emulator that is already running when no physical phone is
+    # available for selection.
+    $deviceId = $connectedEmulators[0].id
+    Write-Host "Using connected Android emulator '$deviceId'." -ForegroundColor Green
 } else {
     $emulatorOutput = (& flutter emulators | Out-String)
     $deviceId = $null
@@ -89,25 +118,24 @@ if ($connectedEmulators.Count -gt 0) {
     $deviceId = Start-AndroidEmulator $deviceId
 }
 
-if ([string]::IsNullOrWhiteSpace($ApiBaseUrl)) {
-    if ($usingWirelessDevice) {
-        $lanIp = Get-NetIPAddress -AddressFamily IPv4 -InterfaceAlias 'Wi-Fi' -PrefixOrigin Manual, Dhcp -ErrorAction SilentlyContinue |
-            Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254.*' } |
-            Select-Object -ExpandProperty IPAddress -First 1
-        if (-not $lanIp) {
-            throw "Could not detect the PC Wi-Fi IPv4 address. Pass -ApiBaseUrl explicitly, for example http://192.168.0.125:8000/api/v1"
-        }
-        $ApiBaseUrl = "http://$lanIp:8000/api/v1"
-        Write-Host "Using LAN API URL $ApiBaseUrl for the wireless device." -ForegroundColor Green
-    } else {
-        $ApiBaseUrl = "http://10.0.2.2:8000/api/v1"
+if ($selectedPhysicalDevice) {
+    $loopbackUrl = [regex]::Match(
+        $ApiBaseUrl,
+        '^http://(?:127\.0\.0\.1|localhost):(?<port>\d+)(?:/|$)',
+        [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
+    )
+    if ([string]::IsNullOrWhiteSpace($ApiBaseUrl)) {
+        $ApiBaseUrl = 'http://127.0.0.1:8000/api/v1'
+        Enable-PhysicalDeviceApiTunnel $selectedPhysicalDevice.id 8000
+    } elseif ($loopbackUrl.Success) {
+        Enable-PhysicalDeviceApiTunnel $selectedPhysicalDevice.id ([int]$loopbackUrl.Groups['port'].Value)
     }
+} elseif ([string]::IsNullOrWhiteSpace($ApiBaseUrl)) {
+    $ApiBaseUrl = 'http://10.0.2.2:8000/api/v1'
 }
 
-# A physical device cannot reach an old/private address that is not assigned
-# to this development PC. Fail early with the current LAN address instead of
-# letting the app appear to hang on login.
-if ($ApiBaseUrl -match '^http://(?<host>\d{1,3}(?:\.\d{1,3}){3}):(?<port>\d+)/') {
+# For explicit LAN URLs, catch addresses that are not assigned to this PC.
+if ($selectedPhysicalDevice -and $ApiBaseUrl -match '^http://(?<host>\d{1,3}(?:\.\d{1,3}){3}):(?<port>\d+)/' -and $Matches['host'] -notin @('127.0.0.1')) {
     $localAddresses = @(Get-NetIPAddress -AddressFamily IPv4 -PrefixOrigin Manual, Dhcp -ErrorAction SilentlyContinue |
         Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254.*' } |
         Select-Object -ExpandProperty IPAddress)

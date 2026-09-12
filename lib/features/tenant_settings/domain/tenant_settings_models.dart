@@ -12,6 +12,7 @@ class TenantSettings {
     required this.employeeCodeNext,
     required this.employeeCodePadding,
     required this.geofenceEnabled,
+    required this.attendanceHoursVisibleToSelf,
     required this.geofenceRadiusMeters,
     required this.smtpHost,
     required this.smtpPort,
@@ -21,6 +22,8 @@ class TenantSettings {
     required this.smtpFromName,
     this.officeLatitude,
     this.officeLongitude,
+    this.geofenceEmployeeIds = const [],
+    this.geofenceEmployees = const [],
   });
 
   final String companyName;
@@ -33,6 +36,7 @@ class TenantSettings {
   final int employeeCodeNext;
   final int employeeCodePadding;
   final bool geofenceEnabled;
+  final bool attendanceHoursVisibleToSelf;
   final double? officeLatitude;
   final double? officeLongitude;
   final int geofenceRadiusMeters;
@@ -42,6 +46,8 @@ class TenantSettings {
   final String smtpEncryption;
   final String smtpFromEmail;
   final String smtpFromName;
+  final List<int> geofenceEmployeeIds;
+  final List<GeofenceEmployee> geofenceEmployees;
 
   factory TenantSettings.fromJson(Map<String, dynamic> json) => TenantSettings(
     companyName: json['company_name']?.toString() ?? '',
@@ -56,6 +62,10 @@ class TenantSettings {
     geofenceEnabled:
         json['geofence_enabled'] == true ||
         asInt(json['geofence_enabled']) == 1,
+    attendanceHoursVisibleToSelf:
+        json['attendance_hours_visible_to_self'] == null ||
+        json['attendance_hours_visible_to_self'] == true ||
+        asInt(json['attendance_hours_visible_to_self']) == 1,
     officeLatitude: json['office_latitude'] == null
         ? null
         : asDouble(json['office_latitude']),
@@ -69,7 +79,39 @@ class TenantSettings {
     smtpEncryption: json['smtp_encryption']?.toString() ?? 'tls',
     smtpFromEmail: json['smtp_from_email']?.toString() ?? '',
     smtpFromName: json['smtp_from_name']?.toString() ?? '',
+    geofenceEmployeeIds: asList(
+      json['geofence_employee_ids'],
+    ).map((item) => asInt(item)).where((id) => id > 0).toList(),
+    geofenceEmployees: asList(
+      json['geofence_employees'],
+    ).map((item) => GeofenceEmployee.fromJson(asMap(item))).toList(),
   );
+}
+
+class GeofenceEmployee {
+  const GeofenceEmployee({
+    required this.id,
+    required this.code,
+    required this.name,
+    required this.status,
+  });
+
+  final int id;
+  final String code;
+  final String name;
+  final String status;
+
+  factory GeofenceEmployee.fromJson(Map<String, dynamic> json) {
+    final name = [json['first_name'], json['middle_name'], json['last_name']]
+        .where((part) => part != null && part.toString().trim().isNotEmpty)
+        .join(' ');
+    return GeofenceEmployee(
+      id: asInt(json['id']),
+      code: json['emp_code']?.toString() ?? '',
+      name: name.isEmpty ? 'Employee' : name,
+      status: json['status']?.toString() ?? 'active',
+    );
+  }
 }
 
 class MasterItem {

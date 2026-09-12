@@ -1,5 +1,10 @@
 import 'package:vistora_mobile/core/api/api_parsing.dart';
 
+bool _canViewHours(Map<String, dynamic> json) {
+  final value = json['canViewWorkedHours'] ?? json['can_view_worked_hours'];
+  return value == null || value == true || value == 1 || value == '1';
+}
+
 class AttendanceRecord {
   const AttendanceRecord({
     required this.id,
@@ -70,6 +75,7 @@ class TodayAttendance {
     required this.canClockOut,
     required this.serverTime,
     required this.geofence,
+    this.canViewWorkedHours = true,
     this.attendance,
   });
 
@@ -77,6 +83,7 @@ class TodayAttendance {
   final bool canClockOut;
   final DateTime? serverTime;
   final GeofenceInfo geofence;
+  final bool canViewWorkedHours;
   final AttendanceRecord? attendance;
 
   factory TodayAttendance.fromResponse(Map<String, dynamic> response) {
@@ -87,6 +94,7 @@ class TodayAttendance {
       canClockOut: data['canClockOut'] == true,
       serverTime: asDateTime(data['serverTime']),
       geofence: GeofenceInfo.fromJson(asMap(data['geofence'])),
+      canViewWorkedHours: _canViewHours(data),
       attendance: attendance is Map
           ? AttendanceRecord.fromJson(asMap(attendance))
           : null,
@@ -105,6 +113,13 @@ class AttendanceDay {
     this.checkInAt,
     this.checkOutAt,
     this.leaveName,
+    this.latitude,
+    this.longitude,
+    this.locationAddress,
+    this.checkOutLatitude,
+    this.checkOutLongitude,
+    this.checkOutLocationAddress,
+    this.canViewWorkedHours = true,
   });
 
   final int? id;
@@ -116,6 +131,13 @@ class AttendanceDay {
   final DateTime? checkInAt;
   final DateTime? checkOutAt;
   final String? leaveName;
+  final double? latitude;
+  final double? longitude;
+  final String? locationAddress;
+  final double? checkOutLatitude;
+  final double? checkOutLongitude;
+  final String? checkOutLocationAddress;
+  final bool canViewWorkedHours;
 
   factory AttendanceDay.fromJson(Map<String, dynamic> json) => AttendanceDay(
     id: json['id'] == null ? null : asInt(json['id']),
@@ -124,9 +146,22 @@ class AttendanceDay {
     weekday: json['weekday']?.toString() ?? '',
     status: asNullableString(json['status']),
     workedMinutes: asInt(json['worked_minutes']),
+    canViewWorkedHours: _canViewHours(json),
     checkInAt: asDateTime(json['check_in_at']),
     checkOutAt: asDateTime(json['check_out_at']),
     leaveName: asNullableString(json['leave_name']),
+    latitude: json['latitude'] == null ? null : asDouble(json['latitude']),
+    longitude: json['longitude'] == null ? null : asDouble(json['longitude']),
+    locationAddress: asNullableString(json['location_address']),
+    checkOutLatitude: json['check_out_latitude'] == null
+        ? null
+        : asDouble(json['check_out_latitude']),
+    checkOutLongitude: json['check_out_longitude'] == null
+        ? null
+        : asDouble(json['check_out_longitude']),
+    checkOutLocationAddress: asNullableString(
+      json['check_out_location_address'],
+    ),
   );
 }
 
@@ -162,7 +197,11 @@ class AttendanceRosterItem {
     this.latitude,
     this.longitude,
     this.locationAddress,
+    this.checkOutLatitude,
+    this.checkOutLongitude,
+    this.checkOutLocationAddress,
     this.isLive = false,
+    this.canViewWorkedHours = true,
   });
 
   final int employeeId;
@@ -177,7 +216,11 @@ class AttendanceRosterItem {
   final double? latitude;
   final double? longitude;
   final String? locationAddress;
+  final double? checkOutLatitude;
+  final double? checkOutLongitude;
+  final String? checkOutLocationAddress;
   final bool isLive;
+  final bool canViewWorkedHours;
 
   factory AttendanceRosterItem.fromJson(Map<String, dynamic> json) {
     final employee = asMap(json['employee']);
@@ -196,7 +239,17 @@ class AttendanceRosterItem {
       latitude: json['latitude'] == null ? null : asDouble(json['latitude']),
       longitude: json['longitude'] == null ? null : asDouble(json['longitude']),
       locationAddress: asNullableString(json['location_address']),
+      checkOutLatitude: json['check_out_latitude'] == null
+          ? null
+          : asDouble(json['check_out_latitude']),
+      checkOutLongitude: json['check_out_longitude'] == null
+          ? null
+          : asDouble(json['check_out_longitude']),
+      checkOutLocationAddress: asNullableString(
+        json['check_out_location_address'],
+      ),
       isLive: json['is_live'] == true,
+      canViewWorkedHours: _canViewHours(json),
     );
   }
 }
