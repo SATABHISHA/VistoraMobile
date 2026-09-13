@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter/services.dart';
 import 'package:vistora_mobile/app/providers.dart';
 import 'package:vistora_mobile/app/theme/app_theme.dart';
 import 'package:vistora_mobile/features/platform_admin/data/platform_repository.dart';
@@ -94,7 +95,7 @@ class _PlatformAdminScreenState extends ConsumerState<PlatformAdminScreen> {
               ButtonSegment(
                 value: 4,
                 icon: Icon(Icons.tune_outlined),
-                label: Text('Billing settings'),
+                label: Text('Settings'),
               ),
             ],
             selected: {_index},
@@ -214,6 +215,211 @@ class _OverviewViewState extends ConsumerState<_OverviewView> {
   );
 }
 
+class _CreateTenantSheet extends StatefulWidget {
+  const _CreateTenantSheet();
+
+  @override
+  State<_CreateTenantSheet> createState() => _CreateTenantSheetState();
+}
+
+class _CreateTenantSheetState extends State<_CreateTenantSheet> {
+  final _formKey = GlobalKey<FormState>();
+  final _corpId = TextEditingController();
+  final _company = TextEditingController();
+  final _username = TextEditingController();
+  final _email = TextEditingController();
+  final _password = TextEditingController();
+  final _confirmation = TextEditingController();
+  final _phone = TextEditingController();
+  final _gstin = TextEditingController();
+
+  @override
+  void dispose() {
+    for (final controller in [
+      _corpId,
+      _company,
+      _username,
+      _email,
+      _password,
+      _confirmation,
+      _phone,
+      _gstin,
+    ]) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  String? _required(String? value) =>
+      value == null || value.trim().isEmpty ? 'This field is required.' : null;
+
+  void _submit() {
+    if (!_formKey.currentState!.validate()) return;
+    Navigator.pop(context, {
+      'corp_id': _corpId.text.trim().toUpperCase(),
+      'company_name': _company.text.trim(),
+      'admin_username': _username.text.trim(),
+      'admin_email': _email.text.trim(),
+      'admin_password': _password.text,
+      'phone': _phone.text.trim(),
+      'gstin': _gstin.text.trim().toUpperCase(),
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+    child: SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 26),
+      child: Form(
+        key: _formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 42,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(99),
+                ),
+              ),
+            ),
+            const SizedBox(height: 18),
+            const _SectionHeader(
+              eyebrow: 'NEW VISTORA WORKSPACE',
+              title: 'Add a client',
+              subtitle:
+                  'Create the company and its primary tenant administrator in one secure step.',
+            ),
+            const SizedBox(height: 20),
+            TextFormField(
+              controller: _corpId,
+              textCapitalization: TextCapitalization.characters,
+              validator: _required,
+              decoration: const InputDecoration(
+                labelText: 'Corporate ID *',
+                hintText: 'AHN001',
+                prefixIcon: Icon(Icons.badge_outlined),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _company,
+              validator: _required,
+              decoration: const InputDecoration(
+                labelText: 'Company name *',
+                prefixIcon: Icon(Icons.apartment_outlined),
+              ),
+            ),
+            const SizedBox(height: 12),
+            const _FormSectionLabel(title: 'PRIMARY ADMINISTRATOR'),
+            const SizedBox(height: 10),
+            TextFormField(
+              controller: _username,
+              validator: _required,
+              decoration: const InputDecoration(
+                labelText: 'Admin username *',
+                prefixIcon: Icon(Icons.alternate_email),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _email,
+              keyboardType: TextInputType.emailAddress,
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return 'Admin email is required.';
+                }
+                if (!value.contains('@') ||
+                    !value.split('@').last.contains('.')) {
+                  return 'Enter a valid email address.';
+                }
+                return null;
+              },
+              decoration: const InputDecoration(
+                labelText: 'Admin email *',
+                prefixIcon: Icon(Icons.mail_outline),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _password,
+              obscureText: true,
+              validator: (value) => (value?.length ?? 0) < 10
+                  ? 'Use at least 10 characters.'
+                  : null,
+              decoration: const InputDecoration(
+                labelText: 'Admin password *',
+                helperText: 'Minimum 10 characters.',
+                prefixIcon: Icon(Icons.lock_outline),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _confirmation,
+              obscureText: true,
+              validator: (value) =>
+                  value != _password.text ? 'Passwords do not match.' : null,
+              decoration: const InputDecoration(
+                labelText: 'Confirm password *',
+                prefixIcon: Icon(Icons.lock_reset_outlined),
+              ),
+            ),
+            const SizedBox(height: 12),
+            const _FormSectionLabel(title: 'OPTIONAL COMPANY DETAILS'),
+            const SizedBox(height: 10),
+            TextFormField(
+              controller: _phone,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(
+                labelText: 'Phone',
+                prefixIcon: Icon(Icons.phone_outlined),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _gstin,
+              textCapitalization: TextCapitalization.characters,
+              maxLength: 30,
+              decoration: const InputDecoration(
+                labelText: 'GSTIN',
+                prefixIcon: Icon(Icons.receipt_long_outlined),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _submit,
+                icon: const Icon(Icons.rocket_launch_outlined),
+                label: const Text('Create client workspace'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class _FormSectionLabel extends StatelessWidget {
+  const _FormSectionLabel({required this.title});
+  final String title;
+
+  @override
+  Widget build(BuildContext context) => Text(
+    title,
+    style: const TextStyle(
+      color: VistoraColors.cyan,
+      fontSize: 11,
+      fontWeight: FontWeight.w900,
+      letterSpacing: 1.1,
+    ),
+  );
+}
+
 class _CompaniesView extends ConsumerStatefulWidget {
   const _CompaniesView();
 
@@ -272,50 +478,38 @@ class _CompaniesViewState extends ConsumerState<_CompaniesView> {
   }
 
   Future<void> _create() async {
-    final corp = TextEditingController();
-    final company = TextEditingController();
-    final accepted = await showDialog<bool>(
+    final details = await showModalBottomSheet<Map<String, String>>(
       context: context,
-      builder: (context) => AlertDialog(
-        icon: const Icon(Icons.apartment_outlined),
-        title: const Text('Create company'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: corp,
-              textCapitalization: TextCapitalization.characters,
-              decoration: const InputDecoration(labelText: 'Corporate ID'),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: company,
-              decoration: const InputDecoration(labelText: 'Company name'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Create'),
-          ),
-        ],
-      ),
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: VistoraColors.background,
+      builder: (context) => const _CreateTenantSheet(),
     );
-    final corpId = corp.text.trim();
-    final companyName = company.text.trim();
-    corp.dispose();
-    company.dispose();
-    if (accepted == true && corpId.isNotEmpty && companyName.isNotEmpty) {
-      await _action(
-        () => repository.createTenant(corpId: corpId, companyName: companyName),
-        '$companyName created.',
-      );
-    }
+    if (details == null) return;
+    final companyName = details['company_name']!;
+    await _action(
+      () => repository.createTenant(
+        corpId: details['corp_id']!,
+        companyName: companyName,
+        adminUsername: details['admin_username']!,
+        adminEmail: details['admin_email']!,
+        adminPassword: details['admin_password']!,
+        phone: details['phone'],
+        gstin: details['gstin'],
+      ),
+      '$companyName and its primary administrator created.',
+    );
+  }
+
+  Future<void> _manageAdmins(PlatformTenant tenant) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: VistoraColors.background,
+      builder: (context) => _TenantAdminsSheet(tenant: tenant),
+    );
+    if (mounted) await _refresh();
   }
 
   Future<void> _editBilling(PlatformTenant tenant) async {
@@ -407,6 +601,7 @@ class _CompaniesViewState extends ConsumerState<_CompaniesView> {
                       '${entry.value.companyName} settings updated.',
                     ),
                     onViewDetails: () => _editBilling(entry.value),
+                    onManageAdmins: () => _manageAdmins(entry.value),
                   ),
                 ),
               ),
@@ -724,6 +919,14 @@ class _OnboardingViewState extends ConsumerState<_OnboardingView> {
     await _future;
   }
 
+  Future<void> _createRegistrationLink() => showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    backgroundColor: VistoraColors.background,
+    builder: (context) => const _ClientRegistrationLinkSheet(),
+  );
+
   Future<void> _review(PlatformOnboardingItem item) async {
     var decision = 'approve';
     final notes = TextEditingController();
@@ -810,7 +1013,60 @@ class _OnboardingViewState extends ConsumerState<_OnboardingView> {
               title: 'Registration queue',
               subtitle: 'Review new company applications securely.',
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    VistoraColors.orange.withValues(alpha: .16),
+                    VistoraColors.cyan.withValues(alpha: .09),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: VistoraColors.cyan.withValues(alpha: .22),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      _IconBadge(
+                        icon: Icons.link_rounded,
+                        color: VistoraColors.cyan,
+                      ),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Invite a new company',
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Create a branded registration link to copy or email to the client.',
+                    style: TextStyle(color: VistoraColors.muted),
+                  ),
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: _createRegistrationLink,
+                      icon: const Icon(Icons.add_link),
+                      label: const Text('Create onboarding link'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 18),
             SegmentedButton<String>(
               segments: const [
                 ButtonSegment(value: 'pending', label: Text('Pending')),
@@ -914,6 +1170,340 @@ class _OnboardingViewState extends ConsumerState<_OnboardingView> {
   );
 }
 
+class _ClientRegistrationLinkSheet extends ConsumerStatefulWidget {
+  const _ClientRegistrationLinkSheet();
+
+  @override
+  ConsumerState<_ClientRegistrationLinkSheet> createState() =>
+      _ClientRegistrationLinkSheetState();
+}
+
+class _ClientRegistrationLinkSheetState
+    extends ConsumerState<_ClientRegistrationLinkSheet> {
+  final _corpId = TextEditingController();
+  final _hours = TextEditingController(text: '48');
+  final _email = TextEditingController();
+  String _validityType = 'one-time';
+  PlatformRegistrationLink? _link;
+  bool _busy = false;
+  bool _sending = false;
+  String? _sendMessage;
+  bool? _sendSucceeded;
+
+  PlatformRepository get repository => ref.read(platformRepositoryProvider);
+
+  @override
+  void dispose() {
+    _corpId.dispose();
+    _hours.dispose();
+    _email.dispose();
+    super.dispose();
+  }
+
+  Future<void> _generate() async {
+    final hours = int.tryParse(_hours.text.trim());
+    if (hours == null || hours < 1 || hours > 720) {
+      _toast(context, 'Validity must be between 1 and 720 hours.', error: true);
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _link = null;
+      _sendMessage = null;
+      _sendSucceeded = null;
+    });
+    try {
+      final link = await repository.createClientRegistrationLink(
+        proposedCorpId: _corpId.text,
+        validityType: _validityType,
+        validHours: hours,
+      );
+      if (!mounted) return;
+      setState(() => _link = link);
+      _toast(context, 'Registration link created.');
+    } catch (error) {
+      if (mounted) _toast(context, error.toString(), error: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _copyLink() async {
+    final link = _link;
+    if (link == null || link.url.isEmpty) return;
+    await Clipboard.setData(ClipboardData(text: link.url));
+    if (mounted) _toast(context, 'Registration link copied.');
+  }
+
+  Future<void> _sendLink() async {
+    final link = _link;
+    final email = _email.text.trim();
+    if (link == null) return;
+    if (!email.contains('@') || !email.split('@').last.contains('.')) {
+      _toast(context, 'Enter a valid recipient email address.', error: true);
+      return;
+    }
+    setState(() {
+      _sending = true;
+      _sendMessage = null;
+    });
+    try {
+      await repository.sendClientRegistrationLink(
+        linkId: link.id,
+        email: email,
+      );
+      if (!mounted) return;
+      setState(() {
+        _sendSucceeded = true;
+        _sendMessage = 'Invitation sent to $email.';
+      });
+      _toast(context, 'Invitation email sent.');
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _sendSucceeded = false;
+        _sendMessage = error.toString();
+      });
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+    child: SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 42,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(99),
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+          const _SectionHeader(
+            eyebrow: 'SECURE CLIENT INVITATION',
+            title: 'Create onboarding link',
+            subtitle:
+                'Generate a Vistora company registration link. Copy it or send it using your configured Superadmin SMTP.',
+          ),
+          const SizedBox(height: 20),
+          Card(
+            margin: EdgeInsets.zero,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  TextField(
+                    controller: _corpId,
+                    textCapitalization: TextCapitalization.characters,
+                    decoration: const InputDecoration(
+                      labelText: 'Proposed Corporate ID (optional)',
+                      hintText: 'Auto-generated if left blank',
+                      prefixIcon: Icon(Icons.badge_outlined),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: _validityType,
+                    decoration: const InputDecoration(
+                      labelText: 'Link validity',
+                      prefixIcon: Icon(Icons.timer_outlined),
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'one-time',
+                        child: Text('One-time registration'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'limited',
+                        child: Text('Limited validity'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'unlimited',
+                        child: Text('Unlimited validity'),
+                      ),
+                    ],
+                    onChanged: (value) =>
+                        setState(() => _validityType = value ?? 'one-time'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _hours,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Valid for (hours)',
+                      helperText: 'Enter between 1 and 720 hours.',
+                      prefixIcon: Icon(Icons.hourglass_bottom_outlined),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: _busy ? null : _generate,
+                      icon: _busy
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.auto_awesome),
+                      label: Text(_busy ? 'Generating…' : 'Generate link'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 360),
+            switchInCurve: Curves.easeOutCubic,
+            transitionBuilder: (child, animation) => FadeTransition(
+              opacity: animation,
+              child: ScaleTransition(scale: animation, child: child),
+            ),
+            child: _link == null
+                ? const SizedBox.shrink(key: ValueKey('no-registration-link'))
+                : _RegistrationLinkResult(
+                    key: ValueKey(_link!.url),
+                    link: _link!,
+                    emailController: _email,
+                    sending: _sending,
+                    sendMessage: _sendMessage,
+                    sendSucceeded: _sendSucceeded,
+                    onCopy: _copyLink,
+                    onSend: _sendLink,
+                  ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _RegistrationLinkResult extends StatelessWidget {
+  const _RegistrationLinkResult({
+    super.key,
+    required this.link,
+    required this.emailController,
+    required this.sending,
+    required this.sendMessage,
+    required this.sendSucceeded,
+    required this.onCopy,
+    required this.onSend,
+  });
+
+  final PlatformRegistrationLink link;
+  final TextEditingController emailController;
+  final bool sending;
+  final String? sendMessage;
+  final bool? sendSucceeded;
+  final VoidCallback onCopy;
+  final VoidCallback onSend;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      gradient: LinearGradient(
+        colors: [
+          VistoraColors.green.withValues(alpha: .12),
+          VistoraColors.cyan.withValues(alpha: .08),
+        ],
+      ),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: VistoraColors.green.withValues(alpha: .27)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Row(
+          children: [
+            Icon(Icons.verified_rounded, color: VistoraColors.green),
+            SizedBox(width: 9),
+            Expanded(
+              child: Text(
+                'Your registration link is ready',
+                style: TextStyle(fontWeight: FontWeight.w900),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        SelectableText(
+          link.url,
+          style: const TextStyle(color: VistoraColors.cyan, height: 1.4),
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            OutlinedButton.icon(
+              onPressed: onCopy,
+              icon: const Icon(Icons.copy_outlined),
+              label: const Text('Copy link'),
+            ),
+            if (link.smtpConfigured)
+              FilledButton.icon(
+                onPressed: sending ? null : onSend,
+                icon: sending
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.mail_outline),
+                label: Text(sending ? 'Sending…' : 'Send email'),
+              ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        if (link.smtpConfigured) ...[
+          TextField(
+            controller: emailController,
+            keyboardType: TextInputType.emailAddress,
+            decoration: const InputDecoration(
+              labelText: 'Recipient email',
+              prefixIcon: Icon(Icons.alternate_email),
+            ),
+          ),
+          const SizedBox(height: 7),
+          const Text(
+            'Email uses the configured Superadmin SMTP settings.',
+            style: TextStyle(color: VistoraColors.muted, fontSize: 12),
+          ),
+        ] else
+          const Text(
+            'Superadmin SMTP is not configured. Copy and share this link, or configure SMTP in Settings to email it from Vistora.',
+            style: TextStyle(color: VistoraColors.amber, fontSize: 12),
+          ),
+        if (sendMessage != null) ...[
+          const SizedBox(height: 10),
+          Text(
+            sendMessage!,
+            style: TextStyle(
+              color: sendSucceeded == true
+                  ? VistoraColors.green
+                  : VistoraColors.pink,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ],
+    ),
+  );
+}
+
 class _TenantCard extends StatelessWidget {
   const _TenantCard({
     required this.tenant,
@@ -921,6 +1511,7 @@ class _TenantCard extends StatelessWidget {
     required this.onToggleStatus,
     required this.onFeature,
     required this.onViewDetails,
+    required this.onManageAdmins,
   });
 
   final PlatformTenant tenant;
@@ -928,6 +1519,7 @@ class _TenantCard extends StatelessWidget {
   final VoidCallback onToggleStatus;
   final void Function(String field, bool enabled) onFeature;
   final VoidCallback onViewDetails;
+  final VoidCallback onManageAdmins;
 
   @override
   Widget build(BuildContext context) => Card(
@@ -1036,9 +1628,396 @@ class _TenantCard extends StatelessWidget {
                 label: const Text('View details'),
                 onPressed: busy ? null : onViewDetails,
               ),
+              ActionChip(
+                avatar: const Icon(Icons.manage_accounts_outlined, size: 18),
+                label: const Text('Manage admins'),
+                onPressed: busy ? null : onManageAdmins,
+              ),
             ],
           ),
         ],
+      ),
+    ),
+  );
+}
+
+class _TenantAdminsSheet extends ConsumerStatefulWidget {
+  const _TenantAdminsSheet({required this.tenant});
+  final PlatformTenant tenant;
+
+  @override
+  ConsumerState<_TenantAdminsSheet> createState() => _TenantAdminsSheetState();
+}
+
+class _TenantAdminsSheetState extends ConsumerState<_TenantAdminsSheet> {
+  late Future<List<PlatformTenantAdmin>> _future;
+  bool _busy = false;
+
+  PlatformRepository get repository => ref.read(platformRepositoryProvider);
+
+  @override
+  void initState() {
+    super.initState();
+    _future = repository.tenantAdmins(widget.tenant.id);
+  }
+
+  Future<void> _refresh() async {
+    setState(() => _future = repository.tenantAdmins(widget.tenant.id));
+    await _future;
+  }
+
+  Future<void> _edit([PlatformTenantAdmin? admin]) async {
+    if (_busy) return;
+    final details = await showModalBottomSheet<Map<String, String>>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: VistoraColors.background,
+      builder: (context) =>
+          _TenantAdminEditorSheet(tenant: widget.tenant, admin: admin),
+    );
+    if (details == null) return;
+    setState(() => _busy = true);
+    try {
+      if (admin == null) {
+        await repository.createTenantAdmin(
+          tenantId: widget.tenant.id,
+          name: details['name']!,
+          roleType: details['role_type']!,
+          username: details['username']!,
+          email: details['email']!,
+          password: details['password']!,
+        );
+      } else {
+        final body = <String, dynamic>{
+          'name': details['name'],
+          'role_type': details['role_type'],
+          'username': details['username'],
+          'email': details['email'],
+          'status': details['status'],
+        };
+        if (details['password']?.isNotEmpty == true) {
+          body['password'] = details['password'];
+        }
+        await repository.updateTenantAdmin(
+          tenantId: widget.tenant.id,
+          adminId: admin.id,
+          data: body,
+        );
+      }
+      if (!mounted) return;
+      setState(() => _future = repository.tenantAdmins(widget.tenant.id));
+      await _future;
+      if (mounted) {
+        _toast(
+          context,
+          admin == null
+              ? 'Administrator added successfully.'
+              : 'Administrator details updated.',
+        );
+      }
+    } catch (error) {
+      if (mounted) _toast(context, error.toString(), error: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+    child: SizedBox(
+      height: MediaQuery.sizeOf(context).height * .88,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(18, 16, 18, 20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _SectionHeader(
+              eyebrow: 'CLIENT ACCESS',
+              title: 'Company admins',
+              subtitle:
+                  '${widget.tenant.companyName} · ${widget.tenant.corpId}',
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _busy ? null : () => _edit(),
+                icon: const Icon(Icons.person_add_alt_1_outlined),
+                label: const Text('Add administrator'),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: FutureBuilder<List<PlatformTenantAdmin>>(
+                future: _future,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState != ConnectionState.done) {
+                    return const _LoadingList();
+                  }
+                  if (snapshot.hasError) {
+                    return _ErrorState(
+                      error: snapshot.error,
+                      onRetry: _refresh,
+                    );
+                  }
+                  final admins = snapshot.data ?? const <PlatformTenantAdmin>[];
+                  if (admins.isEmpty) {
+                    return const _EmptyCard(
+                      message: 'No Admin or HR accounts are registered.',
+                    );
+                  }
+                  return ListView.builder(
+                    padding: const EdgeInsets.only(top: 4),
+                    itemCount: admins.length,
+                    itemBuilder: (context, index) {
+                      final admin = admins[index];
+                      return _Entrance(
+                        delay: index,
+                        child: Card(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          child: Padding(
+                            padding: const EdgeInsets.all(14),
+                            child: Row(
+                              children: [
+                                _IconBadge(
+                                  icon: Icons.manage_accounts_outlined,
+                                  color: admin.status == 'active'
+                                      ? VistoraColors.cyan
+                                      : VistoraColors.pink,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        admin.name,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w900,
+                                        ),
+                                      ),
+                                      Text(
+                                        '${admin.email} · @${admin.username}',
+                                        style: const TextStyle(
+                                          color: VistoraColors.muted,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 5),
+                                      Wrap(
+                                        spacing: 7,
+                                        children: [
+                                          _StatusPill(status: admin.status),
+                                          _MiniMetric(
+                                            icon: Icons.shield_outlined,
+                                            label: admin.roleType,
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        admin.lastLoginAt == null
+                                            ? 'Last login: Never'
+                                            : 'Last login: ${DateFormat.yMMMd().add_jm().format(admin.lastLoginAt!)}',
+                                        style: const TextStyle(
+                                          color: VistoraColors.muted,
+                                          fontSize: 11,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                IconButton.filledTonal(
+                                  tooltip: 'Edit or reset password',
+                                  onPressed: _busy ? null : () => _edit(admin),
+                                  icon: const Icon(Icons.edit_outlined),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class _TenantAdminEditorSheet extends StatefulWidget {
+  const _TenantAdminEditorSheet({required this.tenant, this.admin});
+  final PlatformTenant tenant;
+  final PlatformTenantAdmin? admin;
+
+  @override
+  State<_TenantAdminEditorSheet> createState() =>
+      _TenantAdminEditorSheetState();
+}
+
+class _TenantAdminEditorSheetState extends State<_TenantAdminEditorSheet> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _name;
+  late final TextEditingController _username;
+  late final TextEditingController _email;
+  final _password = TextEditingController();
+  late String _role;
+  late String _status;
+
+  @override
+  void initState() {
+    super.initState();
+    final admin = widget.admin;
+    _name = TextEditingController(text: admin?.name ?? '');
+    _username = TextEditingController(text: admin?.username ?? '');
+    _email = TextEditingController(text: admin?.email ?? '');
+    _role = admin?.roleType ?? 'Admin';
+    _status = admin?.status ?? 'active';
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _username.dispose();
+    _email.dispose();
+    _password.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (!_formKey.currentState!.validate()) return;
+    Navigator.pop(context, {
+      'name': _name.text.trim(),
+      'username': _username.text.trim(),
+      'email': _email.text.trim(),
+      'role_type': _role,
+      'status': _status,
+      'password': _password.text,
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+    child: SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 26),
+      child: Form(
+        key: _formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _SectionHeader(
+              eyebrow: widget.admin == null
+                  ? 'NEW COMPANY ACCOUNT'
+                  : 'ACCOUNT MANAGEMENT',
+              title: widget.admin == null ? 'Add administrator' : 'Edit admin',
+              subtitle: widget.tenant.companyName,
+            ),
+            const SizedBox(height: 18),
+            TextFormField(
+              controller: _name,
+              validator: (value) => value == null || value.trim().isEmpty
+                  ? 'Enter the administrator name.'
+                  : null,
+              decoration: const InputDecoration(
+                labelText: 'Full name *',
+                prefixIcon: Icon(Icons.person_outline),
+              ),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              initialValue: _role,
+              decoration: const InputDecoration(labelText: 'Role'),
+              items: const [
+                DropdownMenuItem(value: 'Admin', child: Text('Admin')),
+                DropdownMenuItem(value: 'HR', child: Text('HR')),
+              ],
+              onChanged: (value) => setState(() => _role = value ?? 'Admin'),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _username,
+              validator: (value) => value == null || value.trim().isEmpty
+                  ? 'Enter a username.'
+                  : null,
+              decoration: const InputDecoration(
+                labelText: 'Username *',
+                prefixIcon: Icon(Icons.alternate_email),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _email,
+              keyboardType: TextInputType.emailAddress,
+              validator: (value) =>
+                  value == null ||
+                      !value.contains('@') ||
+                      !value.split('@').last.contains('.')
+                  ? 'Enter a valid email address.'
+                  : null,
+              decoration: const InputDecoration(
+                labelText: 'Email *',
+                prefixIcon: Icon(Icons.mail_outline),
+              ),
+            ),
+            if (widget.admin != null) ...[
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: _status,
+                decoration: const InputDecoration(labelText: 'Account status'),
+                items: const [
+                  DropdownMenuItem(value: 'active', child: Text('Active')),
+                  DropdownMenuItem(value: 'inactive', child: Text('Inactive')),
+                ],
+                onChanged: (value) =>
+                    setState(() => _status = value ?? 'active'),
+              ),
+            ],
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _password,
+              obscureText: true,
+              validator: (value) {
+                final password = value ?? '';
+                if (widget.admin == null && password.isEmpty) {
+                  return 'Set a temporary password.';
+                }
+                if (password.isNotEmpty && password.length < 10) {
+                  return 'Use at least 10 characters.';
+                }
+                return null;
+              },
+              decoration: InputDecoration(
+                labelText: widget.admin == null
+                    ? 'Temporary password *'
+                    : 'New password (optional)',
+                helperText: widget.admin == null
+                    ? 'Minimum 10 characters.'
+                    : 'Leave blank to keep the existing password.',
+                prefixIcon: const Icon(Icons.lock_outline),
+              ),
+            ),
+            const SizedBox(height: 18),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _submit,
+                icon: const Icon(Icons.save_outlined),
+                label: Text(
+                  widget.admin == null
+                      ? 'Create administrator'
+                      : 'Save administrator',
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     ),
   );
@@ -1917,10 +2896,16 @@ class _BillingSettingsViewState extends ConsumerState<_BillingSettingsView> {
   final _cgst = TextEditingController();
   final _sgst = TextEditingController();
   final _igst = TextEditingController();
+  final _accountEmail = TextEditingController();
+  final _newAccountEmail = TextEditingController();
+  final _currentAccountPassword = TextEditingController();
+  final _newAccountPassword = TextEditingController();
+  final _confirmAccountPassword = TextEditingController();
   bool _gstEnabled = true;
   String _gstMode = 'cgst_sgst';
   bool _loading = true;
   bool _saving = false;
+  bool _accountSaving = false;
   String? _sealUrl;
   Object? _error;
 
@@ -1945,6 +2930,11 @@ class _BillingSettingsViewState extends ConsumerState<_BillingSettingsView> {
       _cgst,
       _sgst,
       _igst,
+      _accountEmail,
+      _newAccountEmail,
+      _currentAccountPassword,
+      _newAccountPassword,
+      _confirmAccountPassword,
     ]) {
       controller.dispose();
     }
@@ -1958,8 +2948,11 @@ class _BillingSettingsViewState extends ConsumerState<_BillingSettingsView> {
     });
     try {
       final settings = await repository.billingSettings();
+      final accountEmail = await repository.superadminAccountEmail();
       if (!mounted) return;
       _apply(settings);
+      _accountEmail.text = accountEmail;
+      _newAccountEmail.text = accountEmail;
     } catch (error) {
       if (mounted) setState(() => _error = error);
     } finally {
@@ -2032,6 +3025,60 @@ class _BillingSettingsViewState extends ConsumerState<_BillingSettingsView> {
     }
   }
 
+  Future<void> _saveAccount() async {
+    if (_accountSaving) return;
+    final email = _newAccountEmail.text.trim();
+    final currentPassword = _currentAccountPassword.text;
+    final newPassword = _newAccountPassword.text;
+    if (!email.contains('@') || !email.contains('.')) {
+      _toast(context, 'Enter a valid Superadmin email address.', error: true);
+      return;
+    }
+    if (currentPassword.isEmpty) {
+      _toast(
+        context,
+        'Enter your current password to authorize this change.',
+        error: true,
+      );
+      return;
+    }
+    if (newPassword.isNotEmpty && newPassword != _confirmAccountPassword.text) {
+      _toast(
+        context,
+        'The new password confirmation does not match.',
+        error: true,
+      );
+      return;
+    }
+    if (newPassword.isNotEmpty && newPassword.length < 10) {
+      _toast(
+        context,
+        'The new password must be at least 10 characters.',
+        error: true,
+      );
+      return;
+    }
+    setState(() => _accountSaving = true);
+    try {
+      final savedEmail = await repository.updateSuperadminAccount(
+        email: email,
+        currentPassword: currentPassword,
+        newPassword: newPassword.isEmpty ? null : newPassword,
+      );
+      if (!mounted) return;
+      _accountEmail.text = savedEmail;
+      _newAccountEmail.text = savedEmail;
+      _currentAccountPassword.clear();
+      _newAccountPassword.clear();
+      _confirmAccountPassword.clear();
+      _toast(context, 'Superadmin account updated.');
+    } catch (error) {
+      if (mounted) _toast(context, error.toString(), error: true);
+    } finally {
+      if (mounted) setState(() => _accountSaving = false);
+    }
+  }
+
   Future<void> _uploadSeal() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
@@ -2075,6 +3122,92 @@ class _BillingSettingsViewState extends ConsumerState<_BillingSettingsView> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
       children: [
+        const _SectionHeader(
+          eyebrow: 'SUPERADMIN SECURITY',
+          title: 'Account access',
+          subtitle:
+              'Change the sign-in email or password for your Superadmin account.',
+        ),
+        const SizedBox(height: 16),
+        Card(
+          margin: EdgeInsets.zero,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: _accountEmail,
+                  readOnly: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Current sign-in email',
+                    prefixIcon: Icon(Icons.verified_user_outlined),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _newAccountEmail,
+                  keyboardType: TextInputType.emailAddress,
+                  autofillHints: const [AutofillHints.email],
+                  decoration: const InputDecoration(
+                    labelText: 'New sign-in email',
+                    prefixIcon: Icon(Icons.email_outlined),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _currentAccountPassword,
+                  obscureText: true,
+                  autofillHints: const [AutofillHints.password],
+                  decoration: const InputDecoration(
+                    labelText: 'Current password (required)',
+                    prefixIcon: Icon(Icons.lock_outline),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _newAccountPassword,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'New password (optional)',
+                    helperText: 'Leave blank to keep the current password.',
+                    prefixIcon: Icon(Icons.password_outlined),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _confirmAccountPassword,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Confirm new password',
+                    prefixIcon: Icon(Icons.password_outlined),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: _accountSaving ? null : _saveAccount,
+                    icon: _accountSaving
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.security_outlined),
+                    label: const Text('Update Superadmin account'),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Your current password is checked before saving. This sign-in email is separate from the provider contact email below.',
+                  style: TextStyle(color: VistoraColors.muted, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
         const _SectionHeader(
           eyebrow: 'PLATFORM BILLING',
           title: 'Invoice identity & GST',

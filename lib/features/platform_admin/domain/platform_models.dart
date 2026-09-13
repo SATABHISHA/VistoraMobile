@@ -82,6 +82,56 @@ class PlatformTenant {
   );
 }
 
+class PlatformTenantAdmin {
+  const PlatformTenantAdmin({
+    required this.id,
+    required this.name,
+    required this.username,
+    required this.email,
+    required this.roleType,
+    required this.status,
+    this.lastLoginAt,
+  });
+
+  final int id;
+  final String name;
+  final String username;
+  final String email;
+  final String roleType;
+  final String status;
+  final DateTime? lastLoginAt;
+
+  factory PlatformTenantAdmin.fromJson(Map<String, dynamic> json) =>
+      PlatformTenantAdmin(
+        id: asInt(json['id']),
+        name: json['name']?.toString() ?? 'Administrator',
+        username: json['username']?.toString() ?? '',
+        email: json['email']?.toString() ?? '',
+        roleType: json['role_type']?.toString() ?? 'Admin',
+        status: json['status']?.toString() ?? 'inactive',
+        lastLoginAt: asDateTime(json['last_login_at']),
+      );
+}
+
+class PlatformRegistrationLink {
+  const PlatformRegistrationLink({
+    required this.id,
+    required this.url,
+    required this.smtpConfigured,
+  });
+
+  final int id;
+  final String url;
+  final bool smtpConfigured;
+
+  factory PlatformRegistrationLink.fromJson(Map<String, dynamic> json) =>
+      PlatformRegistrationLink(
+        id: asInt(asMap(json['link'])['id']),
+        url: json['submissionUrl']?.toString() ?? '',
+        smtpConfigured: _asBool(json['smtpConfigured']),
+      );
+}
+
 class PlatformPayment {
   const PlatformPayment({
     required this.id,

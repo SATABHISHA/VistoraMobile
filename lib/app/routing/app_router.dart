@@ -1,5 +1,5 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
 import 'package:vistora_mobile/core/widgets/network_banner.dart';
 import 'package:vistora_mobile/app/routing/app_shell.dart';
@@ -35,9 +35,15 @@ final _routerRefreshProvider = Provider<ValueNotifier<AuthStatus>>((ref) {
   return notifier;
 });
 
+/// Shared root navigator used by app-wide overlays that need to present routes.
+/// MaterialApp.router's builder context is above the Router and cannot present
+/// dialogs itself.
+final appRootNavigatorKey = GlobalKey<NavigatorState>();
+
 final appRouterProvider = Provider<GoRouter>((ref) {
   final refresh = ref.watch(_routerRefreshProvider);
   return GoRouter(
+    navigatorKey: appRootNavigatorKey,
     initialLocation: '/splash',
     refreshListenable: refresh,
     redirect: (context, state) {

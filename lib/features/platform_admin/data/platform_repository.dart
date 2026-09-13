@@ -34,14 +34,59 @@ class PlatformRepository {
   Future<void> createTenant({
     required String corpId,
     required String companyName,
+    required String adminUsername,
+    required String adminEmail,
+    required String adminPassword,
+    String adminName = 'Tenant Admin',
+    String? phone,
+    String? gstin,
   }) => _api.post(
     '/superadmin/tenants',
     data: {
       'corp_id': corpId.trim().toUpperCase(),
       'company_name': companyName.trim(),
+      'admin_name': adminName.trim(),
+      'admin_username': adminUsername.trim(),
+      'admin_email': adminEmail.trim(),
+      'admin_password': adminPassword,
+      'phone': phone?.trim().isNotEmpty == true ? phone!.trim() : null,
+      'gstin': gstin?.trim().isNotEmpty == true
+          ? gstin!.trim().toUpperCase()
+          : null,
       'status': 'active',
     },
   );
+
+  Future<List<PlatformTenantAdmin>> tenantAdmins(int tenantId) async {
+    final response = await _api.get('/superadmin/tenants/$tenantId/admins');
+    return asList(
+      asMap(response['data'])['items'],
+    ).map((item) => PlatformTenantAdmin.fromJson(asMap(item))).toList();
+  }
+
+  Future<void> createTenantAdmin({
+    required int tenantId,
+    required String name,
+    required String roleType,
+    required String username,
+    required String email,
+    required String password,
+  }) => _api.post(
+    '/superadmin/tenants/$tenantId/admins',
+    data: {
+      'name': name.trim(),
+      'role_type': roleType,
+      'username': username.trim(),
+      'email': email.trim(),
+      'password': password,
+    },
+  );
+
+  Future<void> updateTenantAdmin({
+    required int tenantId,
+    required int adminId,
+    required Map<String, dynamic> data,
+  }) => _api.put('/superadmin/tenants/$tenantId/admins/$adminId', data: data);
 
   Future<void> toggleTenantStatus(int tenantId) =>
       _api.post('/superadmin/tenants/$tenantId/toggle-status');
@@ -101,6 +146,31 @@ class PlatformRepository {
     );
   }
 
+  Future<String> superadminAccountEmail() async {
+    final response = await _api.get('/superadmin/account');
+    return asMap(asMap(response['data'])['account'])['email']?.toString() ?? '';
+  }
+
+  Future<String> updateSuperadminAccount({
+    required String email,
+    required String currentPassword,
+    String? newPassword,
+  }) async {
+    final response = await _api.put(
+      '/superadmin/account',
+      data: {
+        'email': email.trim(),
+        'current_password': currentPassword,
+        if (newPassword?.isNotEmpty == true) ...{
+          'password': newPassword,
+          'password_confirmation': newPassword,
+        },
+      },
+    );
+    return asMap(asMap(response['data'])['account'])['email']?.toString() ??
+        email.trim();
+  }
+
   Future<PlatformBillingSettings> saveBillingSettings(
     PlatformBillingSettings settings,
   ) async {
@@ -150,6 +220,31 @@ class PlatformRepository {
       'decision': decision,
       if (notes?.trim().isNotEmpty == true) 'review_notes': notes!.trim(),
     },
+  );
+
+  Future<PlatformRegistrationLink> createClientRegistrationLink({
+    String? proposedCorpId,
+    required String validityType,
+    required int validHours,
+  }) async {
+    final response = await _api.post(
+      '/superadmin/client-registration-links',
+      data: {
+        if (proposedCorpId?.trim().isNotEmpty == true)
+          'corp_id_proposed': proposedCorpId!.trim().toUpperCase(),
+        'validity_type': validityType,
+        'valid_hours': validHours,
+      },
+    );
+    return PlatformRegistrationLink.fromJson(asMap(response['data']));
+  }
+
+  Future<void> sendClientRegistrationLink({
+    required int linkId,
+    required String email,
+  }) => _api.post(
+    '/superadmin/client-registration-links/$linkId/send',
+    data: {'email': email.trim()},
   );
 
   PlatformPage<T> _page<T>(

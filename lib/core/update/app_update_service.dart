@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -10,7 +11,7 @@ class AppUpdateManifest {
     required this.latestVersion,
     this.minimumVersion,
     this.latestBuild,
-    this.forceUpdate = true,
+    this.forceUpdate = false,
     this.message = 'A newer version of Vistora is available.',
     this.androidUrl,
     this.iosUrl,
@@ -29,7 +30,7 @@ class AppUpdateManifest {
       latestVersion: '${json['latest_version'] ?? json['version'] ?? ''}',
       minimumVersion: json['minimum_version']?.toString(),
       latestBuild: int.tryParse('${json['latest_build'] ?? ''}'),
-      forceUpdate: json['force_update'] as bool? ?? true,
+      forceUpdate: json['force_update'] as bool? ?? false,
       message:
           json['message']?.toString() ??
           'A newer version of Vistora is available.',
@@ -67,29 +68,62 @@ class AppUpdateState {
   final AppUpdateManifest? manifest;
   final bool playUpdateAvailable;
 
-  bool get isRequired {
+  bool get hasUpdate {
     final update = manifest;
     if (playUpdateAvailable) return true;
-    if (update == null || update.latestVersion.trim().isEmpty) return false;
-    final newer = compareVersions(update.latestVersion, current.version) > 0;
+    if (update == null) return false;
+    final latestVersion = update.latestVersion.trim();
+    final newer =
+        latestVersion.isNotEmpty &&
+        compareVersions(latestVersion, current.version) > 0;
     final buildNewer =
         update.latestBuild != null &&
         (int.tryParse(current.buildNumber) ?? 0) < update.latestBuild!;
     return newer || buildNewer;
   }
+
+  bool get isRequired {
+    if (!hasUpdate) return false;
+    final minimum = manifest?.minimumVersion?.trim();
+    if (minimum != null &&
+        minimum.isNotEmpty &&
+        compareVersions(current.version, minimum) < 0) {
+      return true;
+    }
+    return manifest?.forceUpdate ?? false;
+  }
 }
 
 class AppUpdateService {
-  AppUpdateService({Dio? dio}) : _dio = dio ?? Dio();
+  AppUpdateService({Dio? dio})
+    : _dio =
+          dio ??
+          Dio(
+            BaseOptions(
+              connectTimeout: const Duration(seconds: 5),
+              receiveTimeout: const Duration(seconds: 5),
+            ),
+          );
 
   final Dio _dio;
 
   static const manifestUrl = String.fromEnvironment('UPDATE_MANIFEST_URL');
-  static const androidStoreUrl = String.fromEnvironment('ANDROID_STORE_URL');
-  static const iosStoreUrl = String.fromEnvironment('IOS_STORE_URL');
+  static const androidStoreUrl = String.fromEnvironment(
+    'ANDROID_STORE_URL',
+    defaultValue:
+        'https://play.google.com/store/apps/details?id=in.ahanova.vistora_mobile',
+  );
+  static const iosStoreUrl = String.fromEnvironment(
+    'IOS_STORE_URL',
+    defaultValue: 'https://apps.apple.com/app/id6805299271',
+  );
   static const appStoreCountry = String.fromEnvironment(
     'APP_STORE_COUNTRY',
     defaultValue: 'in',
+  );
+  static const appStoreId = String.fromEnvironment(
+    'IOS_APP_STORE_ID',
+    defaultValue: '6805299271',
   );
 
   Future<AppUpdateState> check() async {
@@ -97,7 +131,18 @@ class AppUpdateService {
     AppUpdateManifest? manifest;
     if (manifestUrl.trim().isNotEmpty) {
       try {
-        final response = await _dio.get<Map<String, dynamic>>(manifestUrl);
+        final manifestUri = Uri.parse(manifestUrl);
+        final response = await _dio.getUri<Map<String, dynamic>>(
+          manifestUri.replace(
+            queryParameters: {
+              ...manifestUri.queryParameters,
+              '_v': DateTime.now().millisecondsSinceEpoch.toString(),
+            },
+          ),
+          options: Options(
+            headers: const {'Cache-Control': 'no-cache', 'Pragma': 'no-cache'},
+          ),
+        );
         final data = response.data;
         if (data != null) manifest = AppUpdateManifest.fromJson(data);
       } catch (_) {
@@ -108,7 +153,7 @@ class AppUpdateService {
       manifest = await _checkIosAppStore(current);
     }
     var playUpdateAvailable = false;
-    if (Platform.isAndroid && manifest == null) {
+    if (Platform.isAndroid) {
       try {
         final info = await InAppUpdate.checkForUpdate();
         playUpdateAvailable =
@@ -126,11 +171,10 @@ class AppUpdateService {
 
   Future<AppUpdateManifest?> _checkIosAppStore(PackageInfo current) async {
     try {
-      final bundleId = current.packageName.trim();
-      if (bundleId.isEmpty) return null;
+      if (appStoreId.trim().isEmpty) return null;
       final response = await _dio.getUri<Map<String, dynamic>>(
         Uri.https('itunes.apple.com', '/lookup', {
-          'bundleId': bundleId,
+          'id': appStoreId,
           'country': appStoreCountry,
         }),
       );
@@ -163,13 +207,11 @@ class AppUpdateService {
         return false;
       }
       if (info.immediateUpdateAllowed) {
-        await InAppUpdate.performImmediateUpdate();
-        return true;
+        final result = await InAppUpdate.performImmediateUpdate();
+        if (result == AppUpdateResult.success) return true;
       }
       if (info.flexibleUpdateAllowed) {
-        await InAppUpdate.startFlexibleUpdate();
-        await InAppUpdate.completeFlexibleUpdate();
-        return true;
+        return _startFlexibleUpdate();
       }
     } catch (_) {
       // Local APKs and sideloaded builds do not have Play update metadata.
@@ -177,15 +219,55 @@ class AppUpdateService {
     return false;
   }
 
+  Future<bool> _startFlexibleUpdate() async {
+    StreamSubscription<InstallStatus>? subscription;
+    try {
+      subscription = InAppUpdate.installUpdateListener.listen(
+        (status) async {
+          if (status == InstallStatus.downloaded) {
+            try {
+              await InAppUpdate.completeFlexibleUpdate();
+            } catch (_) {
+              // The Play listing remains available if install handoff fails.
+            } finally {
+              await subscription?.cancel();
+            }
+          } else if (status == InstallStatus.failed ||
+              status == InstallStatus.canceled ||
+              status == InstallStatus.installed) {
+            await subscription?.cancel();
+          }
+        },
+        onError: (_) {
+          subscription?.cancel();
+        },
+      );
+      final result = await InAppUpdate.startFlexibleUpdate();
+      if (result == AppUpdateResult.success) return true;
+    } catch (_) {
+      // If Play cannot start the in-app flow, the caller opens the store page.
+    }
+    await subscription?.cancel();
+    return false;
+  }
+
   Future<bool> openStore(AppUpdateManifest? manifest) async {
-    final configured = Platform.isAndroid
-        ? (manifest?.androidUrl ?? androidStoreUrl)
-        : (manifest?.iosUrl ?? iosStoreUrl);
-    if (configured.trim().isEmpty) return false;
-    return launchUrl(
-      Uri.parse(configured),
-      mode: LaunchMode.externalApplication,
+    final candidates = Platform.isAndroid
+        ? [manifest?.androidUrl, androidStoreUrl]
+        : [manifest?.iosUrl, iosStoreUrl];
+    final configured = candidates.whereType<String>().firstWhere(
+      (url) => url.trim().isNotEmpty,
+      orElse: () => '',
     );
+    if (configured.isEmpty) return false;
+    try {
+      return await launchUrl(
+        Uri.parse(configured),
+        mode: LaunchMode.externalApplication,
+      );
+    } catch (_) {
+      return false;
+    }
   }
 }
 
