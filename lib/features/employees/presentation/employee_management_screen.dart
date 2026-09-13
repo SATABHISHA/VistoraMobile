@@ -148,9 +148,26 @@ class _EmployeeManagementScreenState
     return repository.masters(type);
   };
 
-  void _snack(String message) => ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
-  );
+  void _snack(String message, {bool success = true}) =>
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(
+                success ? Icons.check_circle_outline : Icons.info_outline,
+                color: Colors.white,
+              ),
+              const SizedBox(width: 10),
+              Expanded(child: Text(message)),
+            ],
+          ),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: success
+              ? const Color(0xFF176B55)
+              : const Color(0xFF765019),
+          duration: const Duration(seconds: 4),
+        ),
+      );
 
   void _showDetails(ManagedEmployee employee) {
     showDialog<void>(
@@ -293,16 +310,13 @@ class _EmployeeManagementScreenState
           actions: [
             TextButton(
               onPressed: () async {
-                final sent = await repository.emailInvitation(
+                final delivery = await repository.emailInvitation(
                   token: url.split('/').last,
                   email: input['email'],
                 );
-                if (context.mounted)
-                  _snack(
-                    sent
-                        ? 'Company email sent.'
-                        : 'SMTP is not configured. Copy the link or use your email app.',
-                  );
+                if (context.mounted) {
+                  _snack(delivery.message, success: delivery.sent);
+                }
               },
               child: const Text('Send company email'),
             ),
@@ -340,7 +354,7 @@ class _EmployeeManagementScreenState
     final username = TextEditingController(text: employee.username);
     final email = TextEditingController(text: employee.workEmail);
     final password = TextEditingController();
-    final accepted = await showDialog<bool>(
+    final action = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         icon: const Icon(Icons.password_outlined),
@@ -373,12 +387,17 @@ class _EmployeeManagementScreenState
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
+            onPressed: () => Navigator.pop(dialogContext, 'cancel'),
             child: const Text('Cancel'),
           ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
+          OutlinedButton(
+            onPressed: () => Navigator.pop(dialogContext, 'save'),
             child: const Text('Save login'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(dialogContext, 'email'),
+            icon: const Icon(Icons.mark_email_read_outlined),
+            label: const Text('Save & email'),
           ),
         ],
       ),
@@ -389,21 +408,37 @@ class _EmployeeManagementScreenState
     username.dispose();
     email.dispose();
     password.dispose();
-    if (accepted != true ||
+    if ((action != 'save' && action != 'email') ||
         login.isEmpty ||
         loginEmail.isEmpty ||
         secret.length < 8) {
       return;
     }
-    await _action(
-      () => repository.credentials(
+    setState(() => _busy = true);
+    try {
+      await repository.credentials(
         employeeId: employee.id,
         username: login,
         email: loginEmail,
         password: secret,
-      ),
-      'Login credentials saved for ${employee.name}.',
-    );
+      );
+      await _refresh();
+      if (action == 'email') {
+        final delivery = await repository.emailCredentials(
+          employeeId: employee.id,
+          username: login,
+          email: loginEmail,
+          password: secret,
+        );
+        if (mounted) _snack(delivery.message, success: delivery.sent);
+      } else if (mounted) {
+        _snack('Login credentials saved for ${employee.name}.');
+      }
+    } catch (error) {
+      if (mounted) _snack(error.toString(), success: false);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   @override

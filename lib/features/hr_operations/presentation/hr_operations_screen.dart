@@ -551,6 +551,23 @@ class _OffersTabState extends ConsumerState<_OffersTab> {
     }
   }
 
+  Future<void> _emailOffer(RecruitmentOffer offer) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final delivery = await repository.emailOffer(
+        offerId: offer.id,
+        email: offer.candidateEmail,
+      );
+      if (delivery.sent) await _refresh();
+      if (mounted) _snack(context, delivery.message, success: delivery.sent);
+    } catch (error) {
+      if (mounted) _snack(context, error.toString(), success: false);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _action(Future<void> Function() fn, String message) async {
     if (_busy) return;
     setState(() => _busy = true);
@@ -745,7 +762,6 @@ class _OffersTabState extends ConsumerState<_OffersTab> {
                     'Offer marked $status.',
                   ),
                   itemBuilder: (_) => const [
-                    PopupMenuItem(value: 'sent', child: Text('Mark sent')),
                     PopupMenuItem(
                       value: 'accepted',
                       child: Text('Mark accepted'),
@@ -761,6 +777,15 @@ class _OffersTabState extends ConsumerState<_OffersTab> {
                   ],
                 ),
               ],
+            ),
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton.tonalIcon(
+                onPressed: _busy ? null : () => _emailOffer(item),
+                icon: const Icon(Icons.mark_email_read_outlined),
+                label: Text(item.status == 'sent' ? 'Resend offer email' : 'Send offer email'),
+              ),
             ),
           ],
         ),
@@ -2044,7 +2069,7 @@ void _showDocument(BuildContext context, String title, String html) =>
 class _ApplicationLinkDialog extends StatefulWidget {
   const _ApplicationLinkDialog({required this.link, required this.onEmail});
   final Map<String, dynamic> link;
-  final Future<bool> Function(String email) onEmail;
+  final Future<({bool sent, String message})> Function(String email) onEmail;
 
   @override
   State<_ApplicationLinkDialog> createState() => _ApplicationLinkDialogState();
@@ -2103,14 +2128,9 @@ class _ApplicationLinkDialogState extends State<_ApplicationLinkDialog> {
                       }
                       setState(() => _sending = true);
                       try {
-                        final sent = await widget.onEmail(_email.text.trim());
+                        final delivery = await widget.onEmail(_email.text.trim());
                         if (context.mounted) {
-                          _snack(
-                            context,
-                            sent
-                                ? 'Branded invitation sent.'
-                                : 'Tenant SMTP is not configured. Use Copy link or email app.',
-                          );
+                          _snack(context, delivery.message, success: delivery.sent);
                         }
                       } finally {
                         if (mounted) setState(() => _sending = false);
@@ -2192,7 +2212,23 @@ String _label(String value) => value
           part.isEmpty ? part : '${part[0].toUpperCase()}${part.substring(1)}',
     )
     .join(' ');
-void _snack(BuildContext context, String text) =>
+void _snack(BuildContext context, String text, {bool success = true}) =>
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(text), behavior: SnackBarBehavior.floating),
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(
+              success ? Icons.check_circle_outline : Icons.info_outline,
+              color: Colors.white,
+            ),
+            const SizedBox(width: 10),
+            Expanded(child: Text(text)),
+          ],
+        ),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: success
+            ? const Color(0xFF176B55)
+            : const Color(0xFF765019),
+        duration: const Duration(seconds: 4),
+      ),
     );

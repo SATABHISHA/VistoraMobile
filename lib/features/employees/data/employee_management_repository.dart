@@ -73,11 +73,33 @@ class EmployeeManagementRepository {
     return asMap(response['data'])['invitationUrl']?.toString() ?? '';
   }
 
-  Future<bool> emailInvitation({required String token, String? email}) async {
+  Future<({bool sent, String message})> emailInvitation({
+    required String token,
+    String? email,
+  }) async {
     final response = await _api.post(
       '/employee-invitations/$token/email',
       data: {if (email?.trim().isNotEmpty == true) 'email': email!.trim()},
     );
-    return asMap(response['data'])['sent'] == true;
+    return (
+      sent: asMap(response['data'])['sent'] == true,
+      message: response['message']?.toString() ?? 'Unable to send onboarding email.',
+    );
+  }
+
+  Future<({bool sent, String message})> emailCredentials({
+    required int employeeId,
+    required String username,
+    required String email,
+    required String password,
+  }) async {
+    final response = await _api.post(
+      '/employees/$employeeId/credentials/email',
+      data: {'username': username.trim(), 'email': email.trim(), 'password': password},
+    );
+    return (
+      sent: asMap(response['data'])['sent'] == true,
+      message: response['message']?.toString() ?? 'Unable to send login email.',
+    );
   }
 }

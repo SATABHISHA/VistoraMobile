@@ -48,7 +48,7 @@ class HrOperationsRepository {
       ..['applicationUrl'] = asMap(response['data'])['applicationUrl'];
   }
 
-  Future<bool> emailApplicationLink({
+  Future<({bool sent, String message})> emailApplicationLink({
     required int linkId,
     required String email,
   }) async {
@@ -56,7 +56,10 @@ class HrOperationsRepository {
       '/recruitment/application-links/$linkId/email',
       data: {'email': email},
     );
-    return asMap(asMap(response['data']))['sent'] == true;
+    return (
+      sent: asMap(response['data'])['sent'] == true,
+      message: response['message']?.toString() ?? 'Unable to send application email.',
+    );
   }
 
   Future<void> pipelineAction(int candidateId, String action) => _api.post(
@@ -140,6 +143,20 @@ class HrOperationsRepository {
     '/recruitment/offers/$offerId/status',
     data: {'status': status},
   );
+
+  Future<({bool sent, String message})> emailOffer({
+    required int offerId,
+    String? email,
+  }) async {
+    final response = await _api.post(
+      '/recruitment/offers/$offerId/email',
+      data: {if (email?.trim().isNotEmpty == true) 'email': email!.trim()},
+    );
+    return (
+      sent: asMap(response['data'])['sent'] == true,
+      message: response['message']?.toString() ?? 'Unable to send offer email.',
+    );
+  }
 
   Future<List<LetterTemplate>> appointmentTemplates() async {
     final response = await _api.get('/appointment-templates');
