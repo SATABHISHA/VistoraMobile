@@ -56,8 +56,8 @@ and Apple.
 The Android Play listing URL defaults to this app's package ID. For iOS, the app
 looks up its App Store listing by numeric listing ID and uses that listing's
 update URL; `IOS_APP_STORE_ID` and `IOS_STORE_URL` can override the defaults.
-This fix is prepared as version `1.0.5+8` (Android version code 8 / iOS build
-8). Existing installs need this corrected store build once; after that, the
+This release is prepared as version `1.0.6+9` (Android version code 9 / iOS
+build 9). Existing installs need this corrected store build once; after that, the
 launch/resume check can prompt them about later releases. Increase the Flutter
 build number for each release and publish the matching version in the manifest
 if using one. Keep the manifest on HTTPS and deploy it atomically.
