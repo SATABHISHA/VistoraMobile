@@ -51,13 +51,16 @@ class AuthRepository {
     }
   }
 
-  Future<void> forgotPassword({
+  Future<Map<String, dynamic>> forgotPassword({
     required String corpId,
     required String email,
-  }) => _api.post(
-    '/auth/forgot-password',
-    data: {'corpId': corpId, 'email': email},
-  );
+  }) async {
+    final response = await _api.post(
+      '/auth/forgot-password',
+      data: {'corpId': corpId, 'email': email},
+    );
+    return _map(response['data'])..['success'] = response['success'];
+  }
 
   Future<void> changePassword({
     required String currentPassword,
