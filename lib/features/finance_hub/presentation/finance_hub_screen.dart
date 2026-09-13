@@ -350,7 +350,7 @@ class _FinanceHubScreenState extends ConsumerState<FinanceHubScreen>
     children: [
       Expanded(
         child: DropdownButtonFormField<int>(
-          initialValue: year,
+          value: year,
           items: [
             for (int y = DateTime.now().year; y >= DateTime.now().year - 6; y--)
               DropdownMenuItem(value: y, child: Text('$y')),
@@ -366,7 +366,7 @@ class _FinanceHubScreenState extends ConsumerState<FinanceHubScreen>
       const SizedBox(width: 10),
       Expanded(
         child: DropdownButtonFormField<int?>(
-          initialValue: month,
+          value: month,
           items: [
             const DropdownMenuItem(value: null, child: Text('All months')),
             for (int m = 1; m <= 12; m++)
@@ -1261,7 +1261,7 @@ class _FinanceEntrySheetState extends State<_FinanceEntrySheet> {
           ),
           const SizedBox(height: 10),
           DropdownButtonFormField(
-            initialValue: mode,
+            value: mode,
             decoration: const InputDecoration(labelText: 'Payment mode'),
             items:
                 const [
@@ -1470,7 +1470,7 @@ class _FinanceEntrySheetState extends State<_FinanceEntrySheet> {
             ),
           if (widget.settings.gstEnabled)
             DropdownButtonFormField(
-              initialValue: gst,
+              value: gst,
               decoration: const InputDecoration(labelText: 'GST treatment'),
               items: const [
                 DropdownMenuItem(value: 'none', child: Text('No GST')),

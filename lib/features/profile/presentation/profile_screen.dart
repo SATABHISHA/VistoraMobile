@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -66,7 +68,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final session = ref.watch(authControllerProvider).session!;
+    final auth = ref.watch(authControllerProvider);
+    // Prevent a one-frame null-session build on iOS while GoRouter redirects
+    // to login after sign out.
+    if (Platform.isIOS && auth.status != AuthStatus.authenticated) {
+      return const SizedBox.shrink();
+    }
+    final session = auth.session!;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Profile & security'),

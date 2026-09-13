@@ -55,9 +55,10 @@ class LocationService {
     String? address;
 
     try {
-      final placemarks = await Geocoding()
-          .placemarkFromCoordinates(position.latitude, position.longitude)
-          .timeout(const Duration(seconds: 8));
+      final placemarks = await placemarkFromCoordinates(
+        position.latitude,
+        position.longitude,
+      ).timeout(const Duration(seconds: 8));
       if (placemarks.isNotEmpty) {
         address = formatAttendanceAddress(placemarks.first);
       }

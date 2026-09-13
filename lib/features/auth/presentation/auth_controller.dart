@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:vistora_mobile/app/providers.dart';
@@ -79,6 +80,13 @@ class AuthController extends Notifier<AuthState> {
   Future<void> logout() async {
     try {
       await ref.read(authRepositoryProvider).logout();
+    } catch (error, stackTrace) {
+      // iOS can report a transient Keychain/network error after the local
+      // session has already been invalidated. The user must still be taken
+      // to login without surfacing an uncaught async error overlay.
+      if (!Platform.isIOS) {
+        Error.throwWithStackTrace(error, stackTrace);
+      }
     } finally {
       state = const AuthState.unauthenticated();
     }

@@ -1312,7 +1312,7 @@ class _ClientRegistrationLinkSheetState
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    initialValue: _validityType,
+                    value: _validityType,
                     decoration: const InputDecoration(
                       labelText: 'Link validity',
                       prefixIcon: Icon(Icons.timer_outlined),
@@ -1932,7 +1932,7 @@ class _TenantAdminEditorSheetState extends State<_TenantAdminEditorSheet> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              initialValue: _role,
+              value: _role,
               decoration: const InputDecoration(labelText: 'Role'),
               items: const [
                 DropdownMenuItem(value: 'Admin', child: Text('Admin')),
@@ -1969,7 +1969,7 @@ class _TenantAdminEditorSheetState extends State<_TenantAdminEditorSheet> {
             if (widget.admin != null) ...[
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                initialValue: _status,
+                value: _status,
                 decoration: const InputDecoration(labelText: 'Account status'),
                 items: const [
                   DropdownMenuItem(value: 'active', child: Text('Active')),
