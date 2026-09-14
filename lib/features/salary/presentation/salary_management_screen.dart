@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:vistora_mobile/app/providers.dart';
 import 'package:vistora_mobile/app/theme/app_theme.dart';
+import 'package:vistora_mobile/core/errors/app_exception.dart';
 import 'package:vistora_mobile/features/auth/presentation/auth_controller.dart';
 import 'package:vistora_mobile/features/salary/data/salary_designer_store.dart';
 import 'package:vistora_mobile/features/salary/data/salary_repository.dart';
@@ -37,6 +38,8 @@ class _SalaryManagementScreenState
   late Future<SalaryRosterPage> _future;
   SalaryDesignerState _designer = SalaryDesignerState.defaults;
   bool _designerLoading = true;
+  int _designerVersion = 1;
+  Future<void> _designerSaveQueue = Future<void>.value();
 
   SalaryRepository get repository => ref.read(salaryRepositoryProvider);
 
@@ -86,29 +89,80 @@ class _SalaryManagementScreenState
   Future<void> _loadDesigner() async {
     final corpId =
         ref.read(authControllerProvider).session?.user.corpId ?? 'default';
-    final value = await ref.read(salaryDesignerStoreProvider).read(corpId);
-    if (mounted) {
+    final store = ref.read(salaryDesignerStoreProvider);
+    try {
+      var remote = await repository.designer();
+      if (!await store.wasMigrated(corpId)) {
+        final legacy = await store.readLegacy(corpId);
+        if (legacy != null) {
+          remote = await repository.mergeLegacyDesigner(legacy);
+        }
+        await store.markMigrated(corpId);
+      }
+      if (!mounted) return;
       setState(() {
-        _designer = value;
+        _designer = remote.state;
+        _designerVersion = remote.version;
         _designerLoading = false;
       });
+    } catch (error) {
+      final legacy = await store.readLegacy(corpId);
+      if (!mounted) return;
+      setState(() {
+        _designer = legacy ?? SalaryDesignerState.defaults;
+        _designerLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Unable to load shared salary settings: $error'),
+        ),
+      );
     }
   }
 
   Future<void> _saveDesigner(SalaryDesignerState value) async {
     final previous = _designer;
     setState(() => _designer = value);
-    try {
+    final task = _designerSaveQueue.catchError((_) {}).then((_) async {
       final corpId =
           ref.read(authControllerProvider).session?.user.corpId ?? 'default';
-      await ref.read(salaryDesignerStoreProvider).write(corpId, value);
-    } catch (error) {
-      if (!mounted) return;
-      setState(() => _designer = previous);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to save salary designer: $error')),
-      );
-    }
+      final store = ref.read(salaryDesignerStoreProvider);
+      try {
+        try {
+          await store.write(corpId, value);
+        } catch (_) {}
+        final saved = await repository.updateDesigner(
+          value,
+          version: _designerVersion,
+        );
+        _designerVersion = saved.version;
+        if (mounted && identical(_designer, value)) {
+          setState(() => _designer = saved.state);
+        }
+      } catch (error) {
+        if (error is AppException && error.statusCode == 409) {
+          try {
+            final latest = await repository.designer();
+            _designerVersion = latest.version;
+            if (mounted) setState(() => _designer = latest.state);
+          } catch (_) {}
+        } else if (mounted && identical(_designer, value)) {
+          setState(() => _designer = previous);
+        }
+        try {
+          await store.resetMigration(corpId);
+        } catch (_) {}
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Unable to save shared salary settings: $error'),
+            ),
+          );
+        }
+      }
+    });
+    _designerSaveQueue = task;
+    await task;
   }
 
   @override
@@ -211,7 +265,7 @@ class _SalaryManagementScreenState
                       },
                     );
                     final year = DropdownButtonFormField<int>(
-                      value: _year,
+                      initialValue: _year,
                       decoration: const InputDecoration(labelText: 'Year'),
                       items: years
                           .map(
@@ -943,7 +997,7 @@ class _ComponentEditorState extends State<_ComponentEditor> {
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
-            value: _type,
+            initialValue: _type,
             decoration: const InputDecoration(labelText: 'Type'),
             items: const ['Earning', 'Deduction', 'Reimbursement']
                 .map(
@@ -954,7 +1008,7 @@ class _ComponentEditorState extends State<_ComponentEditor> {
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
-            value: _taxable,
+            initialValue: _taxable,
             decoration: const InputDecoration(labelText: 'Tax treatment'),
             items: const [
               DropdownMenuItem(value: '1', child: Text('Taxable')),
@@ -1163,7 +1217,7 @@ class _FormulaEditorState extends State<_FormulaEditor> {
           ),
           const SizedBox(height: 18),
           DropdownButtonFormField<int>(
-            value: _componentId,
+            initialValue: _componentId,
             decoration: const InputDecoration(labelText: 'Component'),
             items: widget.designer.components
                 .map(
@@ -1178,7 +1232,7 @@ class _FormulaEditorState extends State<_FormulaEditor> {
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
-            value: _type,
+            initialValue: _type,
             decoration: const InputDecoration(labelText: 'Calculation type'),
             items: const [
               DropdownMenuItem(value: 'fixed', child: Text('Fixed amount')),
@@ -1212,7 +1266,7 @@ class _FormulaEditorState extends State<_FormulaEditor> {
           if (_type == 'percent_comp') ...[
             const SizedBox(height: 12),
             DropdownButtonFormField<int>(
-              value: references.any((item) => item.id == _referenceId)
+              initialValue: references.any((item) => item.id == _referenceId)
                   ? _referenceId
                   : null,
               decoration: const InputDecoration(
@@ -1482,7 +1536,7 @@ class _SalaryDetailSheetState extends State<_SalaryDetailSheet> {
         employeeId: widget.employee.employeeId,
         year: widget.year,
         payGroupName: input.group.name,
-        payGroupSnapshot: widget.designer.snapshotFor(input.group),
+        payGroupSnapshot: input.snapshot,
         annualCtc: input.annualCtc,
         breakup: input.breakup,
       );
@@ -1718,11 +1772,13 @@ class _SalaryStructureInput {
     required this.group,
     required this.annualCtc,
     required this.breakup,
+    required this.snapshot,
   });
 
   final SalaryPayGroup group;
   final double annualCtc;
   final SalaryBreakup breakup;
+  final Map<String, dynamic> snapshot;
 }
 
 class _SalaryStructureEditor extends StatefulWidget {
@@ -1743,25 +1799,85 @@ class _SalaryStructureEditor extends StatefulWidget {
 class _SalaryStructureEditorState extends State<_SalaryStructureEditor> {
   late final TextEditingController _ctc;
   late int _groupId;
+  late SalaryDesignerState _activeDesigner;
 
   @override
   void initState() {
     super.initState();
+    _activeDesigner = widget.designer;
     SalaryPayGroup? selected;
+    final saved = widget.current == null
+        ? null
+        : SalaryDesignerState.fromSnapshot(widget.current!.snapshot);
+    if (saved != null &&
+        saved.components.isNotEmpty &&
+        saved.payGroups.isNotEmpty) {
+      final savedGroup = saved.payGroups.first;
+      selected = widget.designer.payGroups.cast<SalaryPayGroup?>().firstWhere(
+        (group) =>
+            group?.name.toLowerCase() == savedGroup.name.toLowerCase() &&
+            _sameIds(group!.componentIds, savedGroup.componentIds) &&
+            _sameFormulas(widget.designer, saved, savedGroup),
+        orElse: () => null,
+      );
+      if (selected == null) {
+        _activeDesigner = saved;
+        selected = savedGroup;
+      }
+    }
     for (final group in widget.designer.payGroups) {
+      if (selected != null) break;
       if (group.name.toLowerCase() ==
           widget.current?.payGroupName.toLowerCase()) {
         selected = group;
         break;
       }
     }
-    selected ??= widget.designer.payGroups.first;
+    selected ??= _activeDesigner.payGroups.first;
     _groupId = selected.id;
     _ctc = TextEditingController(
       text: widget.current == null
           ? ''
           : widget.current!.ctcAnnual.toStringAsFixed(0),
     )..addListener(_refresh);
+  }
+
+  bool _sameIds(List<int> left, List<int> right) {
+    final a = [...left]..sort();
+    final b = [...right]..sort();
+    if (a.length != b.length) return false;
+    for (var index = 0; index < a.length; index++) {
+      if (a[index] != b[index]) return false;
+    }
+    return true;
+  }
+
+  bool _sameFormulas(
+    SalaryDesignerState current,
+    SalaryDesignerState saved,
+    SalaryPayGroup group,
+  ) {
+    final ids = group.componentIds.toSet();
+    final currentFormulas = current.formulas
+        .where((item) => ids.contains(item.componentId))
+        .toList();
+    final savedFormulas = saved.formulas
+        .where((item) => ids.contains(item.componentId))
+        .toList();
+    if (currentFormulas.length != savedFormulas.length) return false;
+    for (final formula in savedFormulas) {
+      final match = currentFormulas.where(
+        (item) => item.componentId == formula.componentId,
+      );
+      if (match.isEmpty) return false;
+      final currentFormula = match.first;
+      if (currentFormula.type != formula.type ||
+          currentFormula.value != formula.value ||
+          currentFormula.referenceComponentId != formula.referenceComponentId) {
+        return false;
+      }
+    }
+    return true;
   }
 
   void _refresh() {
@@ -1777,11 +1893,11 @@ class _SalaryStructureEditorState extends State<_SalaryStructureEditor> {
 
   @override
   Widget build(BuildContext context) {
-    final group = widget.designer.payGroups.firstWhere(
+    final group = _activeDesigner.payGroups.firstWhere(
       (item) => item.id == _groupId,
     );
     final annualCtc = double.tryParse(_ctc.text.trim()) ?? 0;
-    final breakup = widget.designer.calculate(group, annualCtc);
+    final breakup = _activeDesigner.calculate(group, annualCtc);
     return DraggableScrollableSheet(
       expand: false,
       initialChildSize: .94,
@@ -1827,9 +1943,9 @@ class _SalaryStructureEditorState extends State<_SalaryStructureEditor> {
           ),
           const SizedBox(height: 18),
           DropdownButtonFormField<int>(
-            value: _groupId,
+            initialValue: _groupId,
             decoration: const InputDecoration(labelText: 'Pay group'),
-            items: widget.designer.payGroups
+            items: _activeDesigner.payGroups
                 .map(
                   (item) =>
                       DropdownMenuItem(value: item.id, child: Text(item.name)),
@@ -1942,6 +2058,7 @@ class _SalaryStructureEditorState extends State<_SalaryStructureEditor> {
                       group: group,
                       annualCtc: annualCtc,
                       breakup: breakup,
+                      snapshot: _activeDesigner.snapshotFor(group),
                     ),
                   ),
             icon: const Icon(Icons.save_outlined),
@@ -2284,43 +2401,103 @@ class _StructureCard extends StatelessWidget {
   final SalaryStructureRecord structure;
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(18),
-    decoration: BoxDecoration(
-      borderRadius: BorderRadius.circular(20),
-      gradient: const LinearGradient(
-        colors: [Color(0xFF12243A), Color(0xFF17142C)],
+  Widget build(BuildContext context) {
+    final savedDesigner = SalaryDesignerState.fromSnapshot(structure.snapshot);
+    final savedGroup = savedDesigner.payGroups.isEmpty
+        ? null
+        : savedDesigner.payGroups.first;
+    final breakup = savedGroup == null || savedDesigner.components.isEmpty
+        ? null
+        : savedDesigner.calculate(savedGroup, structure.ctcAnnual);
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        gradient: const LinearGradient(
+          colors: [Color(0xFF12243A), Color(0xFF17142C)],
+        ),
+        border: Border.all(color: VistoraColors.cyan.withValues(alpha: .24)),
       ),
-      border: Border.all(color: VistoraColors.cyan.withValues(alpha: .24)),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          structure.payGroupName,
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
-        ),
-        const SizedBox(height: 14),
-        _SalaryLine('Annual CTC', structure.ctcAnnual, VistoraColors.orange),
-        _SalaryLine(
-          'Gross monthly',
-          structure.grossMonthly,
-          VistoraColors.cyan,
-        ),
-        _SalaryLine(
-          'Deductions',
-          structure.deductionMonthly,
-          VistoraColors.pink,
-        ),
-        _SalaryLine(
-          'Net monthly',
-          structure.netMonthly,
-          VistoraColors.green,
-          strong: true,
-        ),
-      ],
-    ),
-  );
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            structure.payGroupName,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 14),
+          _SalaryLine('Annual CTC', structure.ctcAnnual, VistoraColors.orange),
+          _SalaryLine(
+            'Gross monthly',
+            structure.grossMonthly,
+            VistoraColors.cyan,
+          ),
+          _SalaryLine(
+            'Deductions',
+            structure.deductionMonthly,
+            VistoraColors.pink,
+          ),
+          _SalaryLine(
+            'Net monthly',
+            structure.netMonthly,
+            VistoraColors.green,
+            strong: true,
+          ),
+          if (breakup != null && breakup.lines.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            Divider(color: VistoraColors.cyan.withValues(alpha: .18)),
+            const SizedBox(height: 5),
+            const Text(
+              'Assigned component breakdown',
+              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14),
+            ),
+            const SizedBox(height: 8),
+            ...breakup.lines.map(
+              (line) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 5),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            line.component.name,
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          Text(
+                            '${line.component.code} · ${line.component.type}',
+                            style: const TextStyle(
+                              color: VistoraColors.muted,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(_money(line.monthly)),
+                        Text(
+                          '${_money(line.annual)} / year',
+                          style: const TextStyle(
+                            color: VistoraColors.muted,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 }
 
 class _RevisionCard extends StatelessWidget {

@@ -340,11 +340,13 @@ class SalaryDesignerState {
     required this.components,
     required this.payGroups,
     required this.formulas,
+    this.arrearHistory = const [],
   });
 
   final List<SalaryPayComponent> components;
   final List<SalaryPayGroup> payGroups;
   final List<SalaryFormula> formulas;
+  final List<Map<String, dynamic>> arrearHistory;
 
   static const defaults = SalaryDesignerState(
     components: [
@@ -433,16 +435,19 @@ class SalaryDesignerState {
       ),
       SalaryFormula(id: 7, componentId: 7, type: 'fixed', value: 200),
     ],
+    arrearHistory: [],
   );
 
   SalaryDesignerState copyWith({
     List<SalaryPayComponent>? components,
     List<SalaryPayGroup>? payGroups,
     List<SalaryFormula>? formulas,
+    List<Map<String, dynamic>>? arrearHistory,
   }) => SalaryDesignerState(
     components: components ?? this.components,
     payGroups: payGroups ?? this.payGroups,
     formulas: formulas ?? this.formulas,
+    arrearHistory: arrearHistory ?? this.arrearHistory,
   );
 
   factory SalaryDesignerState.fromJson(Map<String, dynamic> json) {
@@ -456,9 +461,37 @@ class SalaryDesignerState {
       json['formulas'],
     ).map((item) => SalaryFormula.fromJson(asMap(item))).toList();
     return SalaryDesignerState(
-      components: components.isEmpty ? defaults.components : components,
-      payGroups: groups.isEmpty ? defaults.payGroups : groups,
-      formulas: formulas.isEmpty ? defaults.formulas : formulas,
+      components: json.containsKey('components')
+          ? components
+          : defaults.components,
+      payGroups: json.containsKey('payGroups') || json.containsKey('pay_groups')
+          ? groups
+          : defaults.payGroups,
+      formulas: json.containsKey('formulas') ? formulas : defaults.formulas,
+      arrearHistory: asList(json['arrearHistory'])
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList(),
+    );
+  }
+
+  factory SalaryDesignerState.fromSnapshot(Map<String, dynamic> snapshot) {
+    final components = asList(
+      snapshot['components'],
+    ).map((item) => SalaryPayComponent.fromJson(asMap(item))).toList();
+    final formulas = asList(
+      snapshot['formulas'],
+    ).map((item) => SalaryFormula.fromJson(asMap(item))).toList();
+    return SalaryDesignerState(
+      components: components,
+      payGroups: [
+        SalaryPayGroup(
+          id: asInt(snapshot['id'], 1) > 0 ? asInt(snapshot['id'], 1) : 1,
+          name: snapshot['name']?.toString() ?? 'Assigned salary structure',
+          componentIds: components.map((component) => component.id).toList(),
+        ),
+      ],
+      formulas: formulas,
     );
   }
 
@@ -466,6 +499,7 @@ class SalaryDesignerState {
     'components': components.map((item) => item.toJson()).toList(),
     'payGroups': payGroups.map((item) => item.toJson()).toList(),
     'formulas': formulas.map((item) => item.toJson()).toList(),
+    'arrearHistory': arrearHistory,
   };
 
   int nextComponentId() => _nextId(components.map((item) => item.id));

@@ -7,6 +7,44 @@ class SalaryRepository {
 
   final ApiClient _api;
 
+  Future<SalaryDesignerRemote> designer() async {
+    final response = await _api.get('/salary/designer');
+    final data = asMap(response['data']);
+    return SalaryDesignerRemote(
+      state: SalaryDesignerState.fromJson(asMap(data['designer'])),
+      version: asInt(data['version'], 1),
+    );
+  }
+
+  Future<SalaryDesignerRemote> updateDesigner(
+    SalaryDesignerState state, {
+    required int version,
+  }) async {
+    final response = await _api.put(
+      '/salary/designer',
+      data: {'version': version, 'designer': state.toJson()},
+    );
+    final data = asMap(response['data']);
+    return SalaryDesignerRemote(
+      state: SalaryDesignerState.fromJson(asMap(data['designer'])),
+      version: asInt(data['version'], version + 1),
+    );
+  }
+
+  Future<SalaryDesignerRemote> mergeLegacyDesigner(
+    SalaryDesignerState state,
+  ) async {
+    final response = await _api.post(
+      '/salary/designer/merge-legacy',
+      data: {'designer': state.toJson()},
+    );
+    final data = asMap(response['data']);
+    return SalaryDesignerRemote(
+      state: SalaryDesignerState.fromJson(asMap(data['designer'])),
+      version: asInt(data['version'], 1),
+    );
+  }
+
   Future<SalaryRosterPage> roster({
     required int year,
     String? query,
@@ -84,4 +122,11 @@ class SalaryRepository {
 
   static String _date(DateTime value) =>
       '${value.year.toString().padLeft(4, '0')}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
+}
+
+class SalaryDesignerRemote {
+  const SalaryDesignerRemote({required this.state, required this.version});
+
+  final SalaryDesignerState state;
+  final int version;
 }

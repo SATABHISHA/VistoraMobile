@@ -72,6 +72,9 @@ void main() {
           description: 'Flexible allowance',
         ),
       ],
+      arrearHistory: [
+        {'amount': 500, 'month': '4', 'year': '2026'},
+      ],
     );
 
     final restored = SalaryDesignerState.fromJson(original.toJson());
@@ -79,5 +82,31 @@ void main() {
     expect(restored.components.last.code, 'FL');
     expect(restored.payGroups.first.componentIds, hasLength(7));
     expect(restored.formulas.last.value, 200);
+    expect(restored.arrearHistory.single['amount'], 500);
+  });
+
+  test('calculates assigned salary from the immutable employee snapshot', () {
+    final snapshot = SalaryDesignerState.fromSnapshot({
+      'id': 9,
+      'name': 'Consultant Pay',
+      'components': [
+        {
+          'id': 30,
+          'name': 'Consultant Basic Salary',
+          'code': 'CBS',
+          'type': 'Earning',
+          'taxable': '1',
+          'desc': 'Consultant base pay',
+        },
+      ],
+      'formulas': [
+        {'id': 30, 'compId': 30, 'type': 'percent_ctc', 'value': 60},
+      ],
+    });
+    final breakup = snapshot.calculate(snapshot.payGroups.single, 600000);
+
+    expect(snapshot.payGroups.single.name, 'Consultant Pay');
+    expect(breakup.lines.single.component.name, 'Consultant Basic Salary');
+    expect(breakup.lines.single.monthly, 30000);
   });
 }

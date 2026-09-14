@@ -9,6 +9,28 @@ class SalaryDesignerStore {
 
   final FlutterSecureStorage _storage;
 
+  Future<SalaryDesignerState?> readLegacy(String corpId) async {
+    try {
+      final value = await _storage.read(key: _key(corpId));
+      if (value == null || value.trim().isEmpty) return null;
+      final decoded = jsonDecode(value);
+      return decoded is Map
+          ? SalaryDesignerState.fromJson(Map<String, dynamic>.from(decoded))
+          : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<bool> wasMigrated(String corpId) async =>
+      (await _storage.read(key: _migrationKey(corpId))) == '1';
+
+  Future<void> markMigrated(String corpId) =>
+      _storage.write(key: _migrationKey(corpId), value: '1');
+
+  Future<void> resetMigration(String corpId) =>
+      _storage.delete(key: _migrationKey(corpId));
+
   Future<SalaryDesignerState> read(String corpId) async {
     try {
       final value = await _storage.read(key: _key(corpId));
@@ -29,4 +51,6 @@ class SalaryDesignerStore {
 
   String _key(String corpId) =>
       'vistora_salary_designer_${corpId.trim().toUpperCase()}';
+
+  String _migrationKey(String corpId) => '${_key(corpId)}_api_migrated_v1';
 }
