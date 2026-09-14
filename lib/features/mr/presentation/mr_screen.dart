@@ -1324,12 +1324,15 @@ class _SettingsView extends ConsumerStatefulWidget {
 
 class _SettingsViewState extends ConsumerState<_SettingsView> {
   final _limit = TextEditingController();
+  final _allowance = TextEditingController();
   late Future<MrSettings> _future;
   bool _initialized = false;
   bool _saving = false;
   bool _autoConfirm = false;
   bool _supervisorCanAssignSelf = false;
   bool _employeeCanAssignSelf = false;
+  String _selectedExpenseDuty = 'hq';
+  Map<String, MrExpenseDutySettings> _expenseDutySettings = const {};
 
   @override
   void initState() {
@@ -1340,17 +1343,56 @@ class _SettingsViewState extends ConsumerState<_SettingsView> {
   @override
   void dispose() {
     _limit.dispose();
+    _allowance.dispose();
     super.dispose();
   }
 
+  void _selectExpenseDuty(String duty) {
+    final settings =
+        _expenseDutySettings[duty] ?? const MrExpenseDutySettings();
+    setState(() {
+      _expenseDutySettings = {
+        ..._expenseDutySettings,
+        _selectedExpenseDuty:
+            (_expenseDutySettings[_selectedExpenseDuty] ??
+                    const MrExpenseDutySettings())
+                .copyWith(
+                  allowanceAmount: double.tryParse(_allowance.text.trim()) ?? 0,
+                ),
+      };
+      _selectedExpenseDuty = duty;
+      _allowance.text = settings.allowanceAmount.toStringAsFixed(2);
+    });
+  }
+
   Future<void> _save() async {
+    final role = ref.read(authControllerProvider).session?.user.normalizedRole;
+    final canConfigureExpenseSettings = role == 'admin' || role == 'hr';
     final value = int.tryParse(_limit.text.trim());
     if (value == null || value < 1 || value > 50) {
       _message('Enter a limit from 1 to 50.');
       return;
     }
+    if (canConfigureExpenseSettings) {
+      final allowance = double.tryParse(_allowance.text.trim());
+      if (allowance == null || allowance < 0) {
+        _message('Enter a non-negative fixed allowance amount.');
+        return;
+      }
+    }
     setState(() => _saving = true);
     try {
+      final expenseSettings = Map<String, MrExpenseDutySettings>.from(
+        _expenseDutySettings,
+      );
+      if (canConfigureExpenseSettings) {
+        final selected =
+            expenseSettings[_selectedExpenseDuty] ??
+            const MrExpenseDutySettings();
+        expenseSettings[_selectedExpenseDuty] = selected.copyWith(
+          allowanceAmount: double.tryParse(_allowance.text.trim()) ?? 0,
+        );
+      }
       final settings = await ref
           .read(mrRepositoryProvider)
           .updateSettings(
@@ -1358,12 +1400,18 @@ class _SettingsViewState extends ConsumerState<_SettingsView> {
             autoConfirmVisitReports: _autoConfirm,
             supervisorCanAssignSelf: _supervisorCanAssignSelf,
             employeeCanAssignSelf: _employeeCanAssignSelf,
+            expenseDutySettings: canConfigureExpenseSettings
+                ? expenseSettings
+                : null,
           );
       if (!mounted) return;
       _limit.text = '${settings.maxLocationsPerDoctor}';
       _autoConfirm = settings.autoConfirmVisitReports;
       _supervisorCanAssignSelf = settings.supervisorCanAssignSelf;
       _employeeCanAssignSelf = settings.employeeCanAssignSelf;
+      _expenseDutySettings = settings.expenseDutySettings;
+      final selectedExpense = settings.expenseForDuty(_selectedExpenseDuty);
+      _allowance.text = selectedExpense.allowanceAmount.toStringAsFixed(2);
       ref.invalidate(mrSettingsProvider);
       ref.invalidate(mrMetadataProvider);
       _message('MR settings saved.', success: true);
@@ -1372,6 +1420,115 @@ class _SettingsViewState extends ConsumerState<_SettingsView> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  Widget _expenseSettingsEditor({required bool canEdit}) {
+    const dutyLabels = {
+      'hq': 'HQ',
+      'ex_hq': 'EX HQ',
+      'outstation': 'Outstation',
+    };
+    final config =
+        _expenseDutySettings[_selectedExpenseDuty] ??
+        const MrExpenseDutySettings();
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        color: Colors.white.withValues(alpha: .025),
+        border: Border.all(color: Colors.white.withValues(alpha: .09)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'Expense claim fields & allowances',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 5),
+          const Text(
+            'Choose the optional fields shown for each duty station and set fixed allowance rates.',
+            style: TextStyle(color: VistoraColors.muted),
+          ),
+          if (!canEdit) ...[
+            const SizedBox(height: 14),
+            const Text(
+              'These settings can only be changed by tenant HR/Admin.',
+              style: TextStyle(color: VistoraColors.cyan),
+            ),
+          ] else ...[
+            const SizedBox(height: 16),
+            InputDecorator(
+              decoration: const InputDecoration(labelText: 'Duty station'),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _selectedExpenseDuty,
+                  isExpanded: true,
+                  items: dutyLabels.entries
+                      .map(
+                        (entry) => DropdownMenuItem(
+                          value: entry.key,
+                          child: Text(entry.value),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: _saving
+                      ? null
+                      : (value) {
+                          if (value != null) _selectExpenseDuty(value);
+                        },
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            ...MrExpenseFields.labels.entries.map((entry) {
+              final visible = config.shows(entry.key);
+              return CheckboxListTile.adaptive(
+                value: visible,
+                onChanged: _saving
+                    ? null
+                    : (value) {
+                        final fields = Map<String, bool>.from(config.fields)
+                          ..[entry.key] = value ?? false;
+                        setState(() {
+                          _expenseDutySettings = {
+                            ..._expenseDutySettings,
+                            _selectedExpenseDuty: config.copyWith(
+                              fields: fields,
+                            ),
+                          };
+                        });
+                      },
+                dense: true,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                title: Text(entry.value),
+                subtitle: Text(
+                  'Show for ${dutyLabels[_selectedExpenseDuty]} claims',
+                ),
+                activeColor: VistoraColors.orange,
+              );
+            }),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _allowance,
+              enabled: !_saving,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              decoration: const InputDecoration(
+                labelText: 'Fixed allowance (₹)',
+                prefixIcon: Icon(Icons.wallet_outlined),
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'The fixed allowance always appears and is read-only on claims. Employees and supervisors enter the working allowance for each claim.',
+              style: TextStyle(color: VistoraColors.muted),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   void _message(String message, {bool success = false}) =>
@@ -1404,6 +1561,7 @@ class _SettingsViewState extends ConsumerState<_SettingsView> {
     final canEditSelfAssignment =
         canConfigureSelfAssignment == 'admin' ||
         canConfigureSelfAssignment == 'hr';
+    final canConfigureExpenseSettings = canEditSelfAssignment;
     return FutureBuilder<MrSettings>(
       future: _future,
       builder: (context, snapshot) {
@@ -1427,6 +1585,11 @@ class _SettingsViewState extends ConsumerState<_SettingsView> {
           _supervisorCanAssignSelf =
               snapshot.requireData.supervisorCanAssignSelf;
           _employeeCanAssignSelf = snapshot.requireData.employeeCanAssignSelf;
+          _expenseDutySettings = snapshot.requireData.expenseDutySettings;
+          final expense = snapshot.requireData.expenseForDuty(
+            _selectedExpenseDuty,
+          );
+          _allowance.text = expense.allowanceAmount.toStringAsFixed(2);
           _initialized = true;
         }
         return ListView(
@@ -1657,6 +1820,10 @@ class _SettingsViewState extends ConsumerState<_SettingsView> {
                                 ),
                               ),
                             ],
+                            const SizedBox(height: 22),
+                            _expenseSettingsEditor(
+                              canEdit: canConfigureExpenseSettings,
+                            ),
                             const SizedBox(height: 16),
                             Align(
                               alignment: Alignment.centerRight,

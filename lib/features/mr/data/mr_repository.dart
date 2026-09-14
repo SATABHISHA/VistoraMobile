@@ -21,6 +21,7 @@ class MrRepository {
     required bool autoConfirmVisitReports,
     required bool supervisorCanAssignSelf,
     required bool employeeCanAssignSelf,
+    Map<String, MrExpenseDutySettings>? expenseDutySettings,
   }) async {
     final response = await _api.put(
       '/mr/settings',
@@ -29,6 +30,10 @@ class MrRepository {
         'auto_confirm_visit_reports': autoConfirmVisitReports,
         'supervisor_can_assign_self': supervisorCanAssignSelf,
         'employee_can_assign_self': employeeCanAssignSelf,
+        if (expenseDutySettings != null)
+          'expense_duty_settings': expenseDutySettings.map(
+            (duty, settings) => MapEntry(duty, settings.toJson()),
+          ),
       },
     );
     return MrSettings.fromJson(asMap(asMap(response['data'])['settings']));

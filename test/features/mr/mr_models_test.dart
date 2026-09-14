@@ -29,6 +29,32 @@ void main() {
     expect(metadata.settings.autoConfirmVisitReports, isTrue);
   });
 
+  test('parses duty-specific claim visibility and fixed allowances', () {
+    final settings = MrSettings.fromJson({
+      'expense_duty_settings': {
+        'hq': {
+          'fields': {'area_covered': false, 'fare_amount': true},
+          'allowance_amount': '125.50',
+          // Old payloads may include this retired setting; it is ignored.
+          'working_allowance_amount': 75,
+        },
+      },
+    });
+
+    expect(settings.expenseForDuty('hq').shows('area_covered'), isFalse);
+    expect(settings.expenseForDuty('hq').shows('fare_amount'), isTrue);
+    expect(settings.expenseForDuty('hq').shows('remarks'), isTrue);
+    expect(settings.expenseForDuty('hq').allowanceAmount, 125.5);
+    expect(
+      settings
+          .expenseForDuty('hq')
+          .toJson()
+          .containsKey('working_allowance_amount'),
+      isFalse,
+    );
+    expect(settings.expenseForDuty('outstation').shows('area_covered'), isTrue);
+  });
+
   test('parses doctor locations and optional geofence configuration', () {
     final doctor = MrDoctor.fromJson({
       'id': 5,

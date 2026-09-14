@@ -106,12 +106,24 @@ class _MrExpenseClaimsViewState extends ConsumerState<MrExpenseClaimsView> {
   }
 
   Future<void> _edit([MrExpenseClaim? claim]) async {
+    late final MrSettings settings;
+    try {
+      settings = (await _repository.metadata()).settings;
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.toString())));
+      }
+      return;
+    }
+    if (!mounted) return;
     final result = await showModalBottomSheet<_ExpenseEditorResult>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: const Color(0xFF10162A),
-      builder: (_) => _ExpenseEditorSheet(claim: claim),
+      builder: (_) => _ExpenseEditorSheet(claim: claim, settings: settings),
     );
     if (result == null || !mounted) return;
     await _mutate(
@@ -769,8 +781,9 @@ class _ExpenseEditorResult {
 }
 
 class _ExpenseEditorSheet extends StatefulWidget {
-  const _ExpenseEditorSheet({this.claim});
+  const _ExpenseEditorSheet({required this.settings, this.claim});
   final MrExpenseClaim? claim;
+  final MrSettings settings;
 
   @override
   State<_ExpenseEditorSheet> createState() => _ExpenseEditorSheetState();
@@ -809,7 +822,10 @@ class _ExpenseEditorSheetState extends State<_ExpenseEditorSheet> {
     _area = TextEditingController(text: claim?.areaCovered);
     _from = TextEditingController(text: claim?.travelFrom);
     _to = TextEditingController(text: claim?.travelTo);
-    _allowance = _number(claim?.allowanceAmount);
+    final dutySettings = widget.settings.expenseForDuty(_dutyType);
+    _allowance = TextEditingController(
+      text: dutySettings.allowanceAmount.toStringAsFixed(2),
+    );
     _working = _number(claim?.workingAllowanceAmount);
     _mode = TextEditingController(text: claim?.modeOfTravel);
     _distance = _number(claim?.distanceKm);
@@ -835,6 +851,17 @@ class _ExpenseEditorSheetState extends State<_ExpenseEditorSheet> {
   double get _allowanceTotal => _value(_allowance) + _value(_working);
   double get _grandTotal =>
       _allowanceTotal + _value(_fare) + _value(_courier) + _value(_other);
+  MrExpenseDutySettings get _dutySettings =>
+      widget.settings.expenseForDuty(_dutyType);
+  bool _shows(String field) => _dutySettings.shows(field);
+
+  void _selectDuty(String duty) {
+    final config = widget.settings.expenseForDuty(duty);
+    setState(() {
+      _dutyType = duty;
+      _allowance.text = config.allowanceAmount.toStringAsFixed(2);
+    });
+  }
 
   @override
   void dispose() {
@@ -926,19 +953,23 @@ class _ExpenseEditorSheetState extends State<_ExpenseEditorSheet> {
                 ButtonSegment(value: 'outstation', label: Text('Outstation')),
               ],
               selected: {_dutyType},
-              onSelectionChanged: (value) =>
-                  setState(() => _dutyType = value.first),
+              onSelectionChanged: (value) => _selectDuty(value.first),
             ),
             const SizedBox(height: 14),
-            _required(_area, 'Area covered', Icons.map_outlined),
-            _required(_from, 'Travel from', Icons.trip_origin),
-            _required(_to, 'Travel to', Icons.location_on_outlined),
-            _required(
-              _mode,
-              'Mode of travel',
-              Icons.directions_transit_outlined,
-            ),
-            _numeric(_distance, 'Distance (km)', Icons.straighten),
+            if (_shows('area_covered'))
+              _required(_area, 'Area covered', Icons.map_outlined),
+            if (_shows('travel_from'))
+              _required(_from, 'Travel from', Icons.trip_origin),
+            if (_shows('travel_to'))
+              _required(_to, 'Travel to', Icons.location_on_outlined),
+            if (_shows('mode_of_travel'))
+              _required(
+                _mode,
+                'Mode of travel',
+                Icons.directions_transit_outlined,
+              ),
+            if (_shows('distance_km'))
+              _numeric(_distance, 'Distance (km)', Icons.straighten),
             const SizedBox(height: 8),
             Text(
               'Allowances',
@@ -954,29 +985,35 @@ class _ExpenseEditorSheetState extends State<_ExpenseEditorSheet> {
                   ? 'EX HQ'
                   : 'Outstation'} allowance',
               Icons.wallet_outlined,
+              readOnly: true,
             ),
             _numeric(_working, 'Working allowance', Icons.work_outline),
-            _numeric(_fare, 'Travel fare', Icons.local_taxi_outlined),
-            _numeric(
-              _courier,
-              'Courier charges',
-              Icons.local_shipping_outlined,
-            ),
-            _numeric(
-              _other,
-              'Other doctor expenses',
-              Icons.medical_information_outlined,
-            ),
-            const SizedBox(height: 8),
-            TextFormField(
-              controller: _remarks,
-              minLines: 2,
-              maxLines: 4,
-              decoration: const InputDecoration(
-                labelText: 'Remarks',
-                prefixIcon: Icon(Icons.notes),
+            if (_shows('fare_amount'))
+              _numeric(_fare, 'Travel fare', Icons.local_taxi_outlined),
+            if (_shows('courier_charges'))
+              _numeric(
+                _courier,
+                'Courier charges',
+                Icons.local_shipping_outlined,
               ),
-            ),
+            if (_shows('other_doctor_expenses'))
+              _numeric(
+                _other,
+                'Other doctor expenses',
+                Icons.medical_information_outlined,
+              ),
+            if (_shows('remarks')) ...[
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _remarks,
+                minLines: 2,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  labelText: 'Remarks',
+                  prefixIcon: Icon(Icons.notes),
+                ),
+              ),
+            ],
             const SizedBox(height: 14),
             Container(
               padding: const EdgeInsets.all(16),
@@ -1048,13 +1085,20 @@ class _ExpenseEditorSheetState extends State<_ExpenseEditorSheet> {
   Widget _numeric(
     TextEditingController controller,
     String label,
-    IconData icon,
-  ) => Padding(
+    IconData icon, {
+    bool readOnly = false,
+  }) => Padding(
     padding: const EdgeInsets.only(bottom: 12),
     child: TextFormField(
       controller: controller,
+      readOnly: readOnly,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
-      decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon)),
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon),
+        suffixIcon: readOnly ? const Icon(Icons.lock_outline, size: 18) : null,
+        helperText: readOnly ? 'Fixed by tenant HR/Admin' : null,
+      ),
       validator: (value) {
         if (value == null || value.trim().isEmpty) return null;
         final parsed = double.tryParse(value.trim());

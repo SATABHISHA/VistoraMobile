@@ -51,12 +51,21 @@ class MrSettings {
     this.autoConfirmVisitReports = false,
     this.supervisorCanAssignSelf = false,
     this.employeeCanAssignSelf = false,
+    this.expenseDutySettings = const {
+      'hq': MrExpenseDutySettings(),
+      'ex_hq': MrExpenseDutySettings(),
+      'outstation': MrExpenseDutySettings(),
+    },
   });
 
   final int maxLocationsPerDoctor;
   final bool autoConfirmVisitReports;
   final bool supervisorCanAssignSelf;
   final bool employeeCanAssignSelf;
+  final Map<String, MrExpenseDutySettings> expenseDutySettings;
+
+  MrExpenseDutySettings expenseForDuty(String duty) =>
+      expenseDutySettings[duty] ?? const MrExpenseDutySettings();
 
   factory MrSettings.fromJson(Map<String, dynamic> json) => MrSettings(
     maxLocationsPerDoctor: asInt(
@@ -66,7 +75,77 @@ class MrSettings {
     autoConfirmVisitReports: json['auto_confirm_visit_reports'] == true,
     supervisorCanAssignSelf: json['supervisor_can_assign_self'] == true,
     employeeCanAssignSelf: json['employee_can_assign_self'] == true,
+    expenseDutySettings: {
+      for (final duty in const ['hq', 'ex_hq', 'outstation'])
+        duty: MrExpenseDutySettings.fromJson(
+          asMap(asMap(json['expense_duty_settings'])[duty]),
+        ),
+    },
   );
+}
+
+class MrExpenseDutySettings {
+  const MrExpenseDutySettings({
+    this.fields = const {},
+    this.allowanceAmount = 0,
+  });
+
+  final Map<String, bool> fields;
+  final double allowanceAmount;
+
+  bool shows(String field) => fields[field] ?? true;
+
+  MrExpenseDutySettings copyWith({
+    Map<String, bool>? fields,
+    double? allowanceAmount,
+  }) => MrExpenseDutySettings(
+    fields: fields ?? this.fields,
+    allowanceAmount: allowanceAmount ?? this.allowanceAmount,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'fields': {
+      for (final field in MrExpenseFields.optional) field: shows(field),
+    },
+    'allowance_amount': allowanceAmount,
+  };
+
+  factory MrExpenseDutySettings.fromJson(Map<String, dynamic> json) {
+    final fieldsJson = asMap(json['fields']);
+    return MrExpenseDutySettings(
+      fields: {
+        for (final field in MrExpenseFields.optional)
+          if (fieldsJson.containsKey(field)) field: fieldsJson[field] == true,
+      },
+      allowanceAmount: asDouble(json['allowance_amount']),
+    );
+  }
+}
+
+abstract final class MrExpenseFields {
+  static const labels = <String, String>{
+    'area_covered': 'Area covered',
+    'mode_of_travel': 'Mode of travel',
+    'travel_from': 'Travel from',
+    'travel_to': 'Travel to',
+    'distance_km': 'Distance covered (km)',
+    'fare_amount': 'Total fare (₹)',
+    'courier_charges': 'Courier charges (₹)',
+    'other_doctor_expenses': 'Other doctor expenses (₹)',
+    'remarks': 'Remarks',
+  };
+
+  static const optional = [
+    'area_covered',
+    'mode_of_travel',
+    'travel_from',
+    'travel_to',
+    'distance_km',
+    'fare_amount',
+    'courier_charges',
+    'other_doctor_expenses',
+    'remarks',
+  ];
 }
 
 class MrMetadata {

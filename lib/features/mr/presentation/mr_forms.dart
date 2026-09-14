@@ -202,11 +202,11 @@ class _DoctorEditorState extends ConsumerState<_DoctorEditor> {
     final repository = ref.read(mrRepositoryProvider);
     final results = await Future.wait<Object>([
       repository.locations(perPage: 100),
-      repository.settings(),
+      repository.metadata(),
     ]);
     return _DoctorChoices(
       locations: (results[0] as MrPage<MrLocation>).items,
-      settings: results[1] as MrSettings,
+      settings: (results[1] as MrMetadata).settings,
     );
   }
 
