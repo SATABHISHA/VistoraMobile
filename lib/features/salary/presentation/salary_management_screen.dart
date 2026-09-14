@@ -2406,9 +2406,11 @@ class _StructureCard extends StatelessWidget {
     final savedGroup = savedDesigner.payGroups.isEmpty
         ? null
         : savedDesigner.payGroups.first;
-    final breakup = savedGroup == null || savedDesigner.components.isEmpty
-        ? null
-        : savedDesigner.calculate(savedGroup, structure.ctcAnnual);
+    final breakup =
+        structure.calculation ??
+        (savedGroup == null || savedDesigner.components.isEmpty
+            ? null
+            : savedDesigner.calculate(savedGroup, structure.ctcAnnual));
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(

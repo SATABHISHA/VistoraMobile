@@ -17,6 +17,20 @@ void main() {
         'deduction_monthly': 3000,
         'net_monthly': 45000,
         'pay_group_snapshot_json': {'name': 'Standard', 'components': []},
+        'calculation': {
+          'gross_monthly': 48000,
+          'deduction_monthly': 3000,
+          'net_monthly': 45000,
+          'components': [
+            {
+              'id': 8,
+              'name': 'Consultant Basic Salary',
+              'code': 'CBS',
+              'type': 'Earning',
+              'monthly': 48000,
+            },
+          ],
+        },
       },
     });
     final revision = SalaryRevisionRecord.fromJson({
@@ -33,6 +47,7 @@ void main() {
 
     expect(employee.salary?.ctcAnnual, 600000);
     expect(employee.salary?.netMonthly, 45000);
+    expect(employee.salary?.calculation?.lines.single.monthly, 48000);
     expect(revision.canRollback, isTrue);
     expect(revision.arrearsDue, 10000);
   });
@@ -108,5 +123,29 @@ void main() {
     expect(snapshot.payGroups.single.name, 'Consultant Pay');
     expect(breakup.lines.single.component.name, 'Consultant Basic Salary');
     expect(breakup.lines.single.monthly, 30000);
+  });
+
+  test('a single custom earning defaults to annual CTC divided by twelve', () {
+    final designer = SalaryDesignerState.fromSnapshot({
+      'id': 4,
+      'name': 'Consultant',
+      'components': [
+        {
+          'id': 12,
+          'name': 'Consultant Basic Salary',
+          'code': 'CBS',
+          'type': 'Earning',
+        },
+      ],
+      'formulas': <Map<String, dynamic>>[],
+    });
+    final breakup = designer.calculate(designer.payGroups.single, 6000);
+
+    expect(6000 / 12, 500);
+    expect(breakup.lines.single.monthly, 500);
+    expect(breakup.lines.single.annual, 6000);
+    expect(breakup.grossMonthly, 500);
+    expect(breakup.deductionMonthly, 0);
+    expect(breakup.netMonthly, 500);
   });
 }

@@ -105,6 +105,7 @@ class SalaryStructureRecord {
     required this.deductionMonthly,
     required this.netMonthly,
     required this.snapshot,
+    this.calculation,
   });
 
   final int id;
@@ -115,6 +116,7 @@ class SalaryStructureRecord {
   final double deductionMonthly;
   final double netMonthly;
   final Map<String, dynamic> snapshot;
+  final SalaryBreakup? calculation;
 
   factory SalaryStructureRecord.fromJson(Map<String, dynamic> json) =>
       SalaryStructureRecord(
@@ -126,6 +128,9 @@ class SalaryStructureRecord {
         deductionMonthly: asDouble(json['deduction_monthly']),
         netMonthly: asDouble(json['net_monthly']),
         snapshot: asMap(json['pay_group_snapshot_json']),
+        calculation: json['calculation'] is Map
+            ? SalaryBreakup.fromJson(asMap(json['calculation']))
+            : null,
       );
 }
 
@@ -189,8 +194,8 @@ class SalaryPayComponent {
   final String taxable;
   final String description;
 
-  bool get isDeduction => type.toLowerCase() == 'deduction';
-  bool get isReimbursement => type.toLowerCase() == 'reimbursement';
+  bool get isDeduction => type.toLowerCase().contains('deduct');
+  bool get isReimbursement => type.toLowerCase().contains('reimburse');
 
   SalaryPayComponent copyWith({
     int? id,
@@ -333,6 +338,19 @@ class SalaryBreakup {
   final double grossMonthly;
   final double deductionMonthly;
   final double netMonthly;
+
+  factory SalaryBreakup.fromJson(Map<String, dynamic> json) => SalaryBreakup(
+    lines: asList(json['components']).map((value) {
+      final line = asMap(value);
+      return SalaryBreakupLine(
+        component: SalaryPayComponent.fromJson(line),
+        monthly: asDouble(line['monthly'] ?? line['amount']),
+      );
+    }).toList(),
+    grossMonthly: asDouble(json['gross_monthly']),
+    deductionMonthly: asDouble(json['deduction_monthly']),
+    netMonthly: asDouble(json['net_monthly']),
+  );
 }
 
 class SalaryDesignerState {
@@ -528,13 +546,32 @@ class SalaryDesignerState {
       final monthlyCtc = annualCtc / 12;
       double value;
       if (formula == null) {
-        value = switch (component.code.toUpperCase()) {
-          'BASIC' => monthlyCtc * .40,
-          'HRA' => monthlyCtc * .20,
-          'SPCL' => monthlyCtc * .30,
-          String code when code.startsWith('PF') => monthlyCtc * .40 * .12,
-          _ => monthlyCtc * .10,
+        final code = component.code.trim().toUpperCase();
+        const standardCodes = {
+          'BASIC',
+          'HRA',
+          'SPCL',
+          'PF_EMP',
+          'PF-EMP',
+          'PF',
         };
+        if (selected.length == 1 &&
+            !standardCodes.contains(code) &&
+            !component.isDeduction &&
+            (component.type.toLowerCase() == 'earning' ||
+                component.isReimbursement)) {
+          // A lone custom earning component is the complete pay group, so its
+          // default is the monthly CTC, not an arbitrary 10% of CTC.
+          value = monthlyCtc;
+        } else {
+          value = switch (code) {
+            'BASIC' => monthlyCtc * .40,
+            'HRA' => monthlyCtc * .20,
+            'SPCL' => monthlyCtc * .30,
+            'PF_EMP' || 'PF-EMP' || 'PF' => monthlyCtc * .40 * .12,
+            _ => monthlyCtc * .10,
+          };
+        }
       } else {
         final activeFormula = formula;
         value = switch (activeFormula.type) {
@@ -544,7 +581,7 @@ class SalaryDesignerState {
               activeFormula.referenceComponentId ?? 0,
             );
             return reference == null
-                ? 0.0
+                ? monthlyCtc * .40 * activeFormula.value / 100
                 : resolve(reference) * activeFormula.value / 100;
           }(),
           _ => activeFormula.value,
