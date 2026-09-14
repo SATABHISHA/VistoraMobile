@@ -169,6 +169,29 @@ class MrRepository {
     return asInt(asMap(asMap(response['data'])['item'])['id'], id ?? 0);
   }
 
+  Future<MrExpenseGenerationReadiness> expenseGenerationReadiness() async {
+    final response = await _api.get('/mr/expense-claims/generation-readiness');
+    return MrExpenseGenerationReadiness.fromJson(asMap(response['data']));
+  }
+
+  Future<MrExpenseDateReadiness> expenseDateReadiness(String date) async {
+    final response = await _api.get(
+      '/mr/expense-claims/report-readiness?date=$date',
+    );
+    return MrExpenseDateReadiness.fromJson(asMap(response['data']));
+  }
+
+  Future<MrExpenseClaim> autoGenerateExpenseClaim({
+    required String dutyType,
+    required bool submit,
+  }) async {
+    final response = await _api.post(
+      '/mr/expense-claims/auto-generate',
+      data: {'duty_type': dutyType, 'mode': submit ? 'submit' : 'edit'},
+    );
+    return MrExpenseClaim.fromJson(asMap(asMap(response['data'])['item']));
+  }
+
   Future<void> deleteExpenseClaim(int id) =>
       _api.delete('/mr/expense-claims/$id');
 

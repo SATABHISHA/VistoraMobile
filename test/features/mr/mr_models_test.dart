@@ -55,6 +55,36 @@ void main() {
     expect(settings.expenseForDuty('outstation').shows('area_covered'), isTrue);
   });
 
+  test('parses manual expense-date approval and doctor summary', () {
+    final readiness = MrExpenseDateReadiness.fromJson({
+      'eligible': false,
+      'reason_code': 'reports_pending_approval',
+      'message': 'One visit report is still awaiting approval.',
+      'total_reports': 2,
+      'approved_reports': 1,
+      'pending_reports': 1,
+      'visit_summary': {
+        'total_doctors': 1,
+        'total_visits': 1,
+        'doctors': [
+          {
+            'doctor_name': 'Dr Sen',
+            'specialization': 'Cardiology',
+            'locations': ['Park Street Clinic'],
+            'visits': [{}],
+          },
+        ],
+      },
+    });
+
+    expect(readiness.eligible, isFalse);
+    expect(readiness.approvedReports, 1);
+    expect(readiness.pendingReports, 1);
+    expect(readiness.totalDoctorsVisited, 1);
+    expect(readiness.visitedDoctors.single.name, 'Dr Sen');
+    expect(readiness.visitedDoctors.single.locations, ['Park Street Clinic']);
+  });
+
   test('parses doctor locations and optional geofence configuration', () {
     final doctor = MrDoctor.fromJson({
       'id': 5,

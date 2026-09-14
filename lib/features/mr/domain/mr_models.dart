@@ -537,6 +537,9 @@ class MrExpenseClaim {
     this.submittedAt,
     this.reviewedAt,
     this.rolledBackAt,
+    this.totalDoctorsVisited = 0,
+    this.totalVisitsRecorded = 0,
+    this.visitedDoctors = const [],
   });
 
   final int id;
@@ -568,6 +571,9 @@ class MrExpenseClaim {
   final DateTime? submittedAt;
   final DateTime? reviewedAt;
   final DateTime? rolledBackAt;
+  final int totalDoctorsVisited;
+  final int totalVisitsRecorded;
+  final List<MrExpenseVisitedDoctor> visitedDoctors;
   final bool canEdit;
   final bool canDelete;
   final bool canSubmit;
@@ -632,6 +638,11 @@ class MrExpenseClaim {
       submittedAt: asDateTime(json['submitted_at']),
       reviewedAt: asDateTime(json['reviewed_at']),
       rolledBackAt: asDateTime(json['rolled_back_at']),
+      totalDoctorsVisited: asInt(json['total_doctors_visited']),
+      totalVisitsRecorded: asInt(json['total_visits_recorded']),
+      visitedDoctors: asList(
+        json['visited_doctors'],
+      ).map((item) => MrExpenseVisitedDoctor.fromJson(asMap(item))).toList(),
       canEdit: json['can_edit'] == true,
       canDelete: json['can_delete'] == true,
       canSubmit: json['can_submit'] == true,
@@ -639,6 +650,147 @@ class MrExpenseClaim {
       canReview: json['can_review'] == true,
       canRevertReview: json['can_revert_review'] == true,
       includedInPayroll: json['included_in_payroll'] == true,
+    );
+  }
+}
+
+class MrExpenseVisitedDoctor {
+  const MrExpenseVisitedDoctor({
+    required this.name,
+    this.specialization,
+    this.locations = const [],
+    this.visitCount = 0,
+  });
+
+  final String name;
+  final String? specialization;
+  final List<String> locations;
+  final int visitCount;
+
+  factory MrExpenseVisitedDoctor.fromJson(Map<String, dynamic> json) =>
+      MrExpenseVisitedDoctor(
+        name: json['doctor_name']?.toString() ?? 'Doctor visit',
+        specialization: asNullableString(json['specialization']),
+        locations: asList(json['locations'])
+            .map((item) => item.toString())
+            .where((item) => item.trim().isNotEmpty)
+            .toList(),
+        visitCount: asList(json['visits']).length,
+      );
+}
+
+class MrExpenseDutyOption {
+  const MrExpenseDutyOption({
+    required this.value,
+    required this.label,
+    required this.allowanceAmount,
+  });
+
+  final String value;
+  final String label;
+  final double allowanceAmount;
+
+  factory MrExpenseDutyOption.fromJson(Map<String, dynamic> json) =>
+      MrExpenseDutyOption(
+        value: json['value']?.toString() ?? 'hq',
+        label: json['label']?.toString() ?? 'HQ',
+        allowanceAmount: asDouble(json['allowance_amount']),
+      );
+}
+
+class MrExpenseDateReadiness {
+  const MrExpenseDateReadiness({
+    required this.eligible,
+    required this.reasonCode,
+    required this.message,
+    required this.totalReports,
+    required this.approvedReports,
+    required this.pendingReports,
+    required this.totalDoctorsVisited,
+    required this.totalVisitsRecorded,
+    required this.visitedDoctors,
+  });
+
+  final bool eligible;
+  final String reasonCode;
+  final String message;
+  final int totalReports;
+  final int approvedReports;
+  final int pendingReports;
+  final int totalDoctorsVisited;
+  final int totalVisitsRecorded;
+  final List<MrExpenseVisitedDoctor> visitedDoctors;
+
+  factory MrExpenseDateReadiness.fromJson(Map<String, dynamic> json) {
+    final summary = asMap(json['visit_summary']);
+    return MrExpenseDateReadiness(
+      eligible: json['eligible'] == true,
+      reasonCode: json['reason_code']?.toString() ?? 'not_ready',
+      message: json['message']?.toString() ?? 'Visit reports are not ready.',
+      totalReports: asInt(json['total_reports']),
+      approvedReports: asInt(json['approved_reports']),
+      pendingReports: asInt(json['pending_reports']),
+      totalDoctorsVisited: asInt(summary['total_doctors']),
+      totalVisitsRecorded: asInt(summary['total_visits']),
+      visitedDoctors: asList(
+        summary['doctors'],
+      ).map((item) => MrExpenseVisitedDoctor.fromJson(asMap(item))).toList(),
+    );
+  }
+}
+
+class MrExpenseGenerationReadiness {
+  const MrExpenseGenerationReadiness({
+    required this.eligible,
+    required this.reasonCode,
+    required this.message,
+    required this.expenseDate,
+    required this.totalReports,
+    required this.approvedReports,
+    required this.pendingReports,
+    required this.totalDoctorsVisited,
+    required this.totalVisitsRecorded,
+    required this.visitedDoctors,
+    required this.dutyOptions,
+    this.clockedOutAt,
+    this.existingClaimStatus,
+  });
+
+  final bool eligible;
+  final String reasonCode;
+  final String message;
+  final DateTime? expenseDate;
+  final DateTime? clockedOutAt;
+  final int totalReports;
+  final int approvedReports;
+  final int pendingReports;
+  final int totalDoctorsVisited;
+  final int totalVisitsRecorded;
+  final List<MrExpenseVisitedDoctor> visitedDoctors;
+  final List<MrExpenseDutyOption> dutyOptions;
+  final String? existingClaimStatus;
+
+  factory MrExpenseGenerationReadiness.fromJson(Map<String, dynamic> json) {
+    final summary = asMap(json['visit_summary']);
+    final existing = asMap(json['existing_claim']);
+    return MrExpenseGenerationReadiness(
+      eligible: json['eligible'] == true,
+      reasonCode: json['reason_code']?.toString() ?? 'not_ready',
+      message: json['message']?.toString() ?? 'Daily claim is not ready yet.',
+      expenseDate: asDateTime(json['expense_date']),
+      clockedOutAt: asDateTime(json['clocked_out_at']),
+      totalReports: asInt(json['total_reports']),
+      approvedReports: asInt(json['approved_reports']),
+      pendingReports: asInt(json['pending_reports']),
+      totalDoctorsVisited: asInt(summary['total_doctors']),
+      totalVisitsRecorded: asInt(summary['total_visits']),
+      visitedDoctors: asList(
+        summary['doctors'],
+      ).map((item) => MrExpenseVisitedDoctor.fromJson(asMap(item))).toList(),
+      dutyOptions: asList(
+        json['duty_options'],
+      ).map((item) => MrExpenseDutyOption.fromJson(asMap(item))).toList(),
+      existingClaimStatus: asNullableString(existing['status']),
     );
   }
 }

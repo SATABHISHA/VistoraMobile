@@ -29,6 +29,16 @@ void main() {
       'can_review': false,
       'can_revert_review': false,
       'included_in_payroll': false,
+      'total_doctors_visited': 1,
+      'total_visits_recorded': 2,
+      'visited_doctors': [
+        {
+          'doctor_name': 'Dr Sen',
+          'specialization': 'Cardiology',
+          'locations': ['Central Clinic'],
+          'visits': [{}, {}],
+        },
+      ],
       'employee': {
         'id': 6,
         'emp_code': 'EMP006',
@@ -45,5 +55,8 @@ void main() {
     expect(claim.totalExpense, 750);
     expect(claim.canRollback, isTrue);
     expect(claim.canEdit, isFalse);
+    expect(claim.totalDoctorsVisited, 1);
+    expect(claim.totalVisitsRecorded, 2);
+    expect(claim.visitedDoctors.single.name, 'Dr Sen');
   });
 }
