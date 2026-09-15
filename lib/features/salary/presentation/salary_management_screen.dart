@@ -265,7 +265,7 @@ class _SalaryManagementScreenState
                       },
                     );
                     final year = DropdownButtonFormField<int>(
-                      initialValue: _year,
+                      value: _year,
                       decoration: const InputDecoration(labelText: 'Year'),
                       items: years
                           .map(
@@ -997,7 +997,7 @@ class _ComponentEditorState extends State<_ComponentEditor> {
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
-            initialValue: _type,
+            value: _type,
             decoration: const InputDecoration(labelText: 'Type'),
             items: const ['Earning', 'Deduction', 'Reimbursement']
                 .map(
@@ -1008,7 +1008,7 @@ class _ComponentEditorState extends State<_ComponentEditor> {
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
-            initialValue: _taxable,
+            value: _taxable,
             decoration: const InputDecoration(labelText: 'Tax treatment'),
             items: const [
               DropdownMenuItem(value: '1', child: Text('Taxable')),
@@ -1217,7 +1217,7 @@ class _FormulaEditorState extends State<_FormulaEditor> {
           ),
           const SizedBox(height: 18),
           DropdownButtonFormField<int>(
-            initialValue: _componentId,
+            value: _componentId,
             decoration: const InputDecoration(labelText: 'Component'),
             items: widget.designer.components
                 .map(
@@ -1232,7 +1232,7 @@ class _FormulaEditorState extends State<_FormulaEditor> {
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
-            initialValue: _type,
+            value: _type,
             decoration: const InputDecoration(labelText: 'Calculation type'),
             items: const [
               DropdownMenuItem(value: 'fixed', child: Text('Fixed amount')),
@@ -1266,7 +1266,7 @@ class _FormulaEditorState extends State<_FormulaEditor> {
           if (_type == 'percent_comp') ...[
             const SizedBox(height: 12),
             DropdownButtonFormField<int>(
-              initialValue: references.any((item) => item.id == _referenceId)
+              value: references.any((item) => item.id == _referenceId)
                   ? _referenceId
                   : null,
               decoration: const InputDecoration(
@@ -1943,7 +1943,7 @@ class _SalaryStructureEditorState extends State<_SalaryStructureEditor> {
           ),
           const SizedBox(height: 18),
           DropdownButtonFormField<int>(
-            initialValue: _groupId,
+            value: _groupId,
             decoration: const InputDecoration(labelText: 'Pay group'),
             items: _activeDesigner.payGroups
                 .map(

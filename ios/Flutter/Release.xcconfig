@@ -6,4 +6,4 @@
 // iOS archive version. Keep this override after Generated.xcconfig so
 // opening Runner.xcworkspace directly in Xcode uses the intended version.
 FLUTTER_BUILD_NAME = 1.0.4
-FLUTTER_BUILD_NUMBER = 8
+FLUTTER_BUILD_NUMBER = 9

@@ -283,7 +283,7 @@ class _MrExpenseReportViewState extends ConsumerState<MrExpenseReportView> {
           children: [
             Expanded(
               child: DropdownButtonFormField<String?>(
-                initialValue: _status,
+                value: _status,
                 decoration: const InputDecoration(labelText: 'Status'),
                 items: [
                   const DropdownMenuItem<String?>(
@@ -310,7 +310,7 @@ class _MrExpenseReportViewState extends ConsumerState<MrExpenseReportView> {
             const SizedBox(width: 9),
             Expanded(
               child: DropdownButtonFormField<int?>(
-                initialValue: _year,
+                value: _year,
                 decoration: const InputDecoration(labelText: 'Year'),
                 items: [
                   const DropdownMenuItem<int?>(
@@ -333,7 +333,7 @@ class _MrExpenseReportViewState extends ConsumerState<MrExpenseReportView> {
           children: [
             Expanded(
               child: DropdownButtonFormField<int?>(
-                initialValue: _month,
+                value: _month,
                 decoration: const InputDecoration(labelText: 'Month'),
                 items: [
                   const DropdownMenuItem<int?>(
@@ -357,7 +357,7 @@ class _MrExpenseReportViewState extends ConsumerState<MrExpenseReportView> {
             const SizedBox(width: 9),
             Expanded(
               child: DropdownButtonFormField<int>(
-                initialValue: _perPage,
+                value: _perPage,
                 decoration: const InputDecoration(labelText: 'Per page'),
                 items: const [
                   DropdownMenuItem(value: 10, child: Text('10 per page')),

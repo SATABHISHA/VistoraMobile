@@ -429,7 +429,7 @@ class _MrExpenseClaimsViewState extends ConsumerState<MrExpenseClaimsView> {
               if (readiness.eligible && readiness.dutyOptions.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  initialValue:
+                  value:
                       readiness.dutyOptions.any(
                         (item) => item.value == _selectedDutyType,
                       )
