@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:vistora_mobile/core/api/api_client.dart';
 import 'package:vistora_mobile/core/api/api_parsing.dart';
 import 'package:vistora_mobile/features/mr/domain/mr_models.dart';
@@ -157,6 +158,52 @@ class MrRepository {
     page,
     perPage,
     MrExpenseClaim.fromJson,
+  );
+
+  Future<Map<String, dynamic>> expenseReport({
+    String? query,
+    String? status,
+    int? year,
+    int? month,
+    String? dateFrom,
+    String? dateTo,
+    String view = 'details',
+    int page = 1,
+    int perPage = 10,
+  }) => _api.get(
+    '/mr/expense-report',
+    queryParameters: {
+      'q': ?query,
+      'status': ?status,
+      'year': ?year,
+      'month': ?month,
+      'date_from': ?dateFrom,
+      'date_to': ?dateTo,
+      'view': view,
+      'page': page,
+      'per_page': perPage,
+    },
+  );
+
+  Future<Response<List<int>>> exportExpenseReport({
+    String? query,
+    String? status,
+    int? year,
+    int? month,
+    String? dateFrom,
+    String? dateTo,
+    bool details = false,
+  }) => _api.download(
+    '/mr/expense-report/export',
+    queryParameters: {
+      'q': ?query,
+      'status': ?status,
+      'year': ?year,
+      'month': ?month,
+      'date_from': ?dateFrom,
+      'date_to': ?dateTo,
+      if (details) 'details': 1,
+    },
   );
 
   Future<int> saveExpenseClaim({

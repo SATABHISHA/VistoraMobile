@@ -10,6 +10,7 @@ import 'package:vistora_mobile/features/mr/data/mr_repository.dart';
 import 'package:vistora_mobile/features/mr/domain/mr_models.dart';
 import 'package:vistora_mobile/features/mr/presentation/mr_forms.dart';
 import 'package:vistora_mobile/features/mr/presentation/mr_expense_claims_view.dart';
+import 'package:vistora_mobile/features/mr/presentation/mr_expense_report_view.dart';
 import 'package:vistora_mobile/features/mr/presentation/mr_providers.dart';
 
 enum _MrSection {
@@ -21,6 +22,7 @@ enum _MrSection {
   assignments,
   teamReports,
   expenseApprovals,
+  expenseReport,
   settings,
   audit,
 }
@@ -35,6 +37,7 @@ extension on _MrSection {
     _MrSection.assignments => 'Assignments',
     _MrSection.teamReports => 'Visit reports',
     _MrSection.expenseApprovals => 'Expense approvals',
+    _MrSection.expenseReport => 'Expense',
     _MrSection.settings => 'Settings',
     _MrSection.audit => 'Audit log',
   };
@@ -48,6 +51,7 @@ extension on _MrSection {
     _MrSection.assignments => Icons.assignment_outlined,
     _MrSection.teamReports => Icons.fact_check_outlined,
     _MrSection.expenseApprovals => Icons.price_check_outlined,
+    _MrSection.expenseReport => Icons.analytics_outlined,
     _MrSection.settings => Icons.tune,
     _MrSection.audit => Icons.history,
   };
@@ -67,6 +71,7 @@ class MrScreen extends ConsumerWidget {
       'supervisor',
       'superadmin',
     }.contains(role);
+    final tenantHrAdmin = role == 'admin' || role == 'hr';
     final employeeCatalog =
         role == 'employee' &&
         ref
@@ -84,6 +89,7 @@ class MrScreen extends ConsumerWidget {
       if (manager) _MrSection.assignments,
       if (manager) _MrSection.teamReports,
       if (manager) _MrSection.expenseApprovals,
+      if (tenantHrAdmin) _MrSection.expenseReport,
       if (manager) _MrSection.settings,
       if (manager) _MrSection.audit,
       if (employeeCatalog) ...[
@@ -147,6 +153,8 @@ class MrScreen extends ConsumerWidget {
                   const MrExpenseClaimsView(mine: true)
                 else if (section == _MrSection.expenseApprovals)
                   const MrExpenseClaimsView(reviewable: true)
+                else if (section == _MrSection.expenseReport)
+                  const MrExpenseReportView()
                 else
                   _RecordsView(section: section, role: role),
             ],
@@ -218,7 +226,9 @@ class _RecordsViewState extends ConsumerState<_RecordsView> {
           perPage: _perPage,
         ),
       ),
-      _MrSection.myExpenses || _MrSection.expenseApprovals => throw StateError(
+      _MrSection.myExpenses ||
+      _MrSection.expenseApprovals ||
+      _MrSection.expenseReport => throw StateError(
         'Expense claims use their own view.',
       ),
       _MrSection.doctors => _objects(
@@ -1213,7 +1223,7 @@ class _FilterPanel extends StatelessWidget {
                   SizedBox(
                     width: fieldWidth,
                     child: DropdownButtonFormField<String?>(
-                      value: status,
+                      initialValue: status,
                       decoration: const InputDecoration(labelText: 'Status'),
                       items: [
                         const DropdownMenuItem<String?>(
@@ -1261,7 +1271,7 @@ class _FilterPanel extends StatelessWidget {
                 SizedBox(
                   width: compact ? (constraints.maxWidth - 10) / 2 : 130,
                   child: DropdownButtonFormField<int?>(
-                    value: year,
+                    initialValue: year,
                     decoration: const InputDecoration(labelText: 'Year'),
                     items: [
                       const DropdownMenuItem<int?>(
@@ -1284,7 +1294,7 @@ class _FilterPanel extends StatelessWidget {
                 SizedBox(
                   width: compact ? (constraints.maxWidth - 10) / 2 : 130,
                   child: DropdownButtonFormField<int>(
-                    value: perPage,
+                    initialValue: perPage,
                     decoration: const InputDecoration(labelText: 'Per page'),
                     items: const [
                       DropdownMenuItem(value: 10, child: Text('10')),

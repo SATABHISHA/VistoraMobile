@@ -185,45 +185,10 @@ class _MrExpenseClaimsViewState extends ConsumerState<MrExpenseClaimsView> {
   }
 
   Future<String?> _notes(String title, {bool required = true}) async {
-    final controller = TextEditingController();
-    String? error;
-    final result = await showDialog<String>(
+    return showDialog<String>(
       context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text(title),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            minLines: 2,
-            maxLines: 5,
-            decoration: InputDecoration(
-              labelText: required ? 'Notes *' : 'Notes (optional)',
-              errorText: error,
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () {
-                final value = controller.text.trim();
-                if (required && value.isEmpty) {
-                  setDialogState(() => error = 'Please enter a reason.');
-                  return;
-                }
-                Navigator.pop(dialogContext, value);
-              },
-              child: const Text('Continue'),
-            ),
-          ],
-        ),
-      ),
+      builder: (_) => _ExpenseNotesDialog(title: title, required: required),
     );
-    controller.dispose();
-    return result;
   }
 
   Future<void> _pickDate() async {
@@ -2006,6 +1971,61 @@ class _ReadinessPill extends StatelessWidget {
         ),
       ],
     ),
+  );
+}
+
+class _ExpenseNotesDialog extends StatefulWidget {
+  const _ExpenseNotesDialog({required this.title, required this.required});
+
+  final String title;
+  final bool required;
+
+  @override
+  State<_ExpenseNotesDialog> createState() => _ExpenseNotesDialogState();
+}
+
+class _ExpenseNotesDialogState extends State<_ExpenseNotesDialog> {
+  final _controller = TextEditingController();
+  String? _error;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _close([String? value]) {
+    FocusManager.instance.primaryFocus?.unfocus();
+    Navigator.of(context).pop(value);
+  }
+
+  void _continue() {
+    final value = _controller.text.trim();
+    if (widget.required && value.isEmpty) {
+      setState(() => _error = 'Please enter a reason.');
+      return;
+    }
+    _close(value);
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text(widget.title),
+    content: TextField(
+      controller: _controller,
+      autofocus: true,
+      minLines: 2,
+      maxLines: 5,
+      textCapitalization: TextCapitalization.sentences,
+      decoration: InputDecoration(
+        labelText: widget.required ? 'Notes *' : 'Notes (optional)',
+        errorText: _error,
+      ),
+    ),
+    actions: [
+      TextButton(onPressed: () => _close(), child: const Text('Cancel')),
+      FilledButton(onPressed: _continue, child: const Text('Continue')),
+    ],
   );
 }
 
