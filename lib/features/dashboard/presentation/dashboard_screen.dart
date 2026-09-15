@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -45,10 +43,10 @@ class DashboardScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final auth = ref.watch(authControllerProvider);
-    // On iOS, GoRouter can need one frame to redirect after logout changes
-    // auth state. Do not build the old protected screen with a null session
-    // during that transition; the login route is rendered immediately after.
-    if (Platform.isIOS && auth.status != AuthStatus.authenticated) {
+    // GoRouter can need one frame to redirect after logout changes auth state.
+    // Do not build the old protected screen with a null session during that
+    // transition on Android or any other platform.
+    if (auth.status != AuthStatus.authenticated || auth.session == null) {
       return const SizedBox.shrink();
     }
     final session = auth.session!;

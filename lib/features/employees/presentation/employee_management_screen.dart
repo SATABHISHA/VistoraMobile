@@ -296,17 +296,38 @@ class _EmployeeManagementScreenState
       return;
     }
     await _action(() async {
-      final url = await repository.createInvitation(
+      final invitation = await repository.createInvitation(
         email: input['email']!,
         employeeName: input['name'],
         validityType: input['validity'] ?? '7-days',
       );
+      final url = invitation.url;
       if (!mounted) return;
       await showDialog<void>(
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('Onboarding link ready'),
-          content: SelectableText(url),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (invitation.username.isNotEmpty) ...[
+                const Text(
+                  'Assigned login username',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 4),
+                SelectableText(invitation.username),
+                const SizedBox(height: 14),
+              ],
+              const Text(
+                'Share this secure onboarding link:',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 4),
+              SelectableText(url),
+            ],
+          ),
           actions: [
             TextButton(
               onPressed: () async {

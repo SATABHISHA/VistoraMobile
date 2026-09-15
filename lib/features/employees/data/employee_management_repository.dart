@@ -56,7 +56,7 @@ class EmployeeManagementRepository {
     },
   );
 
-  Future<String> createInvitation({
+  Future<({String url, String username})> createInvitation({
     required String email,
     String? employeeName,
     String validityType = '7-days',
@@ -70,7 +70,12 @@ class EmployeeManagementRepository {
         'validity_type': validityType,
       },
     );
-    return asMap(response['data'])['invitationUrl']?.toString() ?? '';
+    final data = asMap(response['data']);
+    final invitation = asMap(data['invitation']);
+    return (
+      url: data['invitationUrl']?.toString() ?? '',
+      username: invitation['username']?.toString() ?? data['username']?.toString() ?? '',
+    );
   }
 
   Future<({bool sent, String message})> emailInvitation({
