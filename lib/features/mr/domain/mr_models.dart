@@ -51,6 +51,7 @@ class MrSettings {
     this.autoConfirmVisitReports = false,
     this.supervisorCanAssignSelf = false,
     this.employeeCanAssignSelf = false,
+    this.restrictEmployeeSupervisorToState = false,
     this.expenseDutySettings = const {
       'hq': MrExpenseDutySettings(),
       'ex_hq': MrExpenseDutySettings(),
@@ -62,6 +63,7 @@ class MrSettings {
   final bool autoConfirmVisitReports;
   final bool supervisorCanAssignSelf;
   final bool employeeCanAssignSelf;
+  final bool restrictEmployeeSupervisorToState;
   final Map<String, MrExpenseDutySettings> expenseDutySettings;
 
   MrExpenseDutySettings expenseForDuty(String duty) =>
@@ -75,6 +77,8 @@ class MrSettings {
     autoConfirmVisitReports: json['auto_confirm_visit_reports'] == true,
     supervisorCanAssignSelf: json['supervisor_can_assign_self'] == true,
     employeeCanAssignSelf: json['employee_can_assign_self'] == true,
+    restrictEmployeeSupervisorToState:
+        json['restrict_employee_supervisor_to_state'] == true,
     expenseDutySettings: {
       for (final duty in const ['hq', 'ex_hq', 'outstation'])
         duty: MrExpenseDutySettings.fromJson(
@@ -155,6 +159,7 @@ class MrMetadata {
     required this.businessUnits,
     required this.employees,
     required this.settings,
+    required this.stateRestriction,
   });
 
   final List<MrOption> states;
@@ -162,6 +167,7 @@ class MrMetadata {
   final List<MrOption> businessUnits;
   final List<MrEmployeeOption> employees;
   final MrSettings settings;
+  final MrStateRestriction stateRestriction;
 
   factory MrMetadata.fromJson(Map<String, dynamic> json) => MrMetadata(
     states: _options(json['states']),
@@ -171,10 +177,41 @@ class MrMetadata {
       json['employees'],
     ).map((item) => MrEmployeeOption.fromJson(asMap(item))).toList(),
     settings: MrSettings.fromJson(asMap(json['settings'])),
+    stateRestriction: MrStateRestriction.fromJson(
+      asMap(json['state_restriction']),
+    ),
   );
 
   static List<MrOption> _options(Object? value) =>
       asList(value).map((item) => MrOption.fromJson(asMap(item))).toList();
+}
+
+class MrStateRestriction {
+  const MrStateRestriction({
+    this.enabled = false,
+    this.appliesToCurrentUser = false,
+    this.employeeStateId,
+    this.employeeStateName,
+    this.stateRequired = false,
+    this.canRequestStateAssignment = false,
+  });
+
+  final bool enabled;
+  final bool appliesToCurrentUser;
+  final int? employeeStateId;
+  final String? employeeStateName;
+  final bool stateRequired;
+  final bool canRequestStateAssignment;
+
+  factory MrStateRestriction.fromJson(Map<String, dynamic> json) =>
+      MrStateRestriction(
+        enabled: json['enabled'] == true,
+        appliesToCurrentUser: json['applies_to_current_user'] == true,
+        employeeStateId: _nullableInt(json['employee_state_id']),
+        employeeStateName: asNullableString(json['employee_state_name']),
+        stateRequired: json['state_required'] == true,
+        canRequestStateAssignment: json['can_request_state_assignment'] == true,
+      );
 }
 
 class MrDoctor {

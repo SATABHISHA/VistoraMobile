@@ -22,22 +22,31 @@ class MrRepository {
     required bool autoConfirmVisitReports,
     required bool supervisorCanAssignSelf,
     required bool employeeCanAssignSelf,
+    bool? restrictEmployeeSupervisorToState,
     Map<String, MrExpenseDutySettings>? expenseDutySettings,
   }) async {
-    final response = await _api.put(
-      '/mr/settings',
-      data: {
-        'max_locations_per_doctor': maxLocationsPerDoctor,
-        'auto_confirm_visit_reports': autoConfirmVisitReports,
-        'supervisor_can_assign_self': supervisorCanAssignSelf,
-        'employee_can_assign_self': employeeCanAssignSelf,
-        if (expenseDutySettings != null)
-          'expense_duty_settings': expenseDutySettings.map(
-            (duty, settings) => MapEntry(duty, settings.toJson()),
-          ),
-      },
-    );
+    final data = <String, dynamic>{
+      'max_locations_per_doctor': maxLocationsPerDoctor,
+      'auto_confirm_visit_reports': autoConfirmVisitReports,
+      'supervisor_can_assign_self': supervisorCanAssignSelf,
+      'employee_can_assign_self': employeeCanAssignSelf,
+      if (expenseDutySettings case final expense?)
+        'expense_duty_settings': expense.map(
+          (duty, settings) => MapEntry(duty, settings.toJson()),
+        ),
+    };
+    if (restrictEmployeeSupervisorToState != null) {
+      data['restrict_employee_supervisor_to_state'] =
+          restrictEmployeeSupervisorToState;
+    }
+    final response = await _api.put('/mr/settings', data: data);
     return MrSettings.fromJson(asMap(asMap(response['data'])['settings']));
+  }
+
+  Future<String> requestStateAssignment() async {
+    final response = await _api.post('/mr/state-assignment-request');
+    return (response['message'] ?? 'Your administrator has been notified.')
+        .toString();
   }
 
   Future<MrPage<MrDoctor>> doctors({

@@ -1341,6 +1341,7 @@ class _SettingsViewState extends ConsumerState<_SettingsView> {
   bool _autoConfirm = false;
   bool _supervisorCanAssignSelf = false;
   bool _employeeCanAssignSelf = false;
+  bool _restrictEmployeeSupervisorToState = false;
   String _selectedExpenseDuty = 'hq';
   Map<String, MrExpenseDutySettings> _expenseDutySettings = const {};
 
@@ -1410,6 +1411,9 @@ class _SettingsViewState extends ConsumerState<_SettingsView> {
             autoConfirmVisitReports: _autoConfirm,
             supervisorCanAssignSelf: _supervisorCanAssignSelf,
             employeeCanAssignSelf: _employeeCanAssignSelf,
+            restrictEmployeeSupervisorToState: canConfigureExpenseSettings
+                ? _restrictEmployeeSupervisorToState
+                : null,
             expenseDutySettings: canConfigureExpenseSettings
                 ? expenseSettings
                 : null,
@@ -1419,6 +1423,8 @@ class _SettingsViewState extends ConsumerState<_SettingsView> {
       _autoConfirm = settings.autoConfirmVisitReports;
       _supervisorCanAssignSelf = settings.supervisorCanAssignSelf;
       _employeeCanAssignSelf = settings.employeeCanAssignSelf;
+      _restrictEmployeeSupervisorToState =
+          settings.restrictEmployeeSupervisorToState;
       _expenseDutySettings = settings.expenseDutySettings;
       final selectedExpense = settings.expenseForDuty(_selectedExpenseDuty);
       _allowance.text = selectedExpense.allowanceAmount.toStringAsFixed(2);
@@ -1595,6 +1601,8 @@ class _SettingsViewState extends ConsumerState<_SettingsView> {
           _supervisorCanAssignSelf =
               snapshot.requireData.supervisorCanAssignSelf;
           _employeeCanAssignSelf = snapshot.requireData.employeeCanAssignSelf;
+          _restrictEmployeeSupervisorToState =
+              snapshot.requireData.restrictEmployeeSupervisorToState;
           _expenseDutySettings = snapshot.requireData.expenseDutySettings;
           final expense = snapshot.requireData.expenseForDuty(
             _selectedExpenseDuty,
@@ -1823,6 +1831,57 @@ class _SettingsViewState extends ConsumerState<_SettingsView> {
                                   ),
                                   subtitle: const Text(
                                     'Employees can create their own doctor visits and add doctors or locations within their tenant territory.',
+                                    style: TextStyle(
+                                      color: VistoraColors.muted,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                            if (canEditSelfAssignment) ...[
+                              const SizedBox(height: 16),
+                              AnimatedContainer(
+                                duration: const Duration(milliseconds: 260),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(18),
+                                  color: _restrictEmployeeSupervisorToState
+                                      ? VistoraColors.cyan.withValues(
+                                          alpha: .12,
+                                        )
+                                      : Colors.white.withValues(alpha: .03),
+                                  border: Border.all(
+                                    color: _restrictEmployeeSupervisorToState
+                                        ? VistoraColors.cyan.withValues(
+                                            alpha: .5,
+                                          )
+                                        : Colors.white.withValues(alpha: .1),
+                                  ),
+                                ),
+                                child: SwitchListTile.adaptive(
+                                  value: _restrictEmployeeSupervisorToState,
+                                  onChanged: _saving
+                                      ? null
+                                      : (value) => setState(
+                                          () =>
+                                              _restrictEmployeeSupervisorToState =
+                                                  value,
+                                        ),
+                                  secondary: Icon(
+                                    _restrictEmployeeSupervisorToState
+                                        ? Icons.map_outlined
+                                        : Icons.public_outlined,
+                                    color: _restrictEmployeeSupervisorToState
+                                        ? VistoraColors.cyan
+                                        : VistoraColors.amber,
+                                  ),
+                                  title: const Text(
+                                    'Restrict employees and supervisors to employment state',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                  subtitle: const Text(
+                                    'They can view and add doctors and locations only in their assigned employment state. HR/Admin retain full access.',
                                     style: TextStyle(
                                       color: VistoraColors.muted,
                                     ),

@@ -207,6 +207,7 @@ class _DoctorEditorState extends ConsumerState<_DoctorEditor> {
     return _DoctorChoices(
       locations: (results[0] as MrPage<MrLocation>).items,
       settings: (results[1] as MrMetadata).settings,
+      metadata: results[1] as MrMetadata,
     );
   }
 
@@ -228,7 +229,11 @@ class _DoctorEditorState extends ConsumerState<_DoctorEditor> {
     });
   }
 
-  Future<void> _save(int limit) async {
+  Future<void> _save(int limit, MrStateRestriction restriction) async {
+    if (restriction.stateRequired) {
+      await _requestStateAssignment();
+      return;
+    }
     if (!_formKey.currentState!.validate()) return;
     if (_selectedIds.isEmpty) {
       setState(
@@ -271,6 +276,17 @@ class _DoctorEditorState extends ConsumerState<_DoctorEditor> {
     }
   }
 
+  Future<void> _requestStateAssignment() async {
+    try {
+      final message = await ref
+          .read(mrRepositoryProvider)
+          .requestStateAssignment();
+      if (mounted) _showError(context, message);
+    } catch (error) {
+      if (mounted) _showError(context, error);
+    }
+  }
+
   @override
   Widget build(BuildContext context) => _DialogFrame(
     title: widget.doctor == null ? 'Add doctor' : 'Edit doctor',
@@ -291,6 +307,7 @@ class _DoctorEditorState extends ConsumerState<_DoctorEditor> {
           );
         }
         final choices = snapshot.requireData;
+        final restriction = choices.metadata.stateRestriction;
         final query = _search.text.trim().toLowerCase();
         final locations = choices.locations.where((location) {
           if (query.isEmpty) return true;
@@ -303,6 +320,14 @@ class _DoctorEditorState extends ConsumerState<_DoctorEditor> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              if (restriction.appliesToCurrentUser) ...[
+                _stateRestrictionBanner(
+                  context,
+                  restriction,
+                  restriction.stateRequired ? _requestStateAssignment : null,
+                ),
+                const SizedBox(height: 12),
+              ],
               _responsiveFields([
                 TextFormField(
                   controller: _name,
@@ -435,7 +460,10 @@ class _DoctorEditorState extends ConsumerState<_DoctorEditor> {
                 saveLabel: widget.doctor == null
                     ? 'Add doctor'
                     : 'Save changes',
-                onSave: () => _save(choices.settings.maxLocationsPerDoctor),
+                onSave: () => _save(
+                  choices.settings.maxLocationsPerDoctor,
+                  choices.metadata.stateRestriction,
+                ),
               ),
             ],
           ),
@@ -446,9 +474,14 @@ class _DoctorEditorState extends ConsumerState<_DoctorEditor> {
 }
 
 class _DoctorChoices {
-  const _DoctorChoices({required this.locations, required this.settings});
+  const _DoctorChoices({
+    required this.locations,
+    required this.settings,
+    required this.metadata,
+  });
   final List<MrLocation> locations;
   final MrSettings settings;
+  final MrMetadata metadata;
 }
 
 class _LocationEditor extends ConsumerStatefulWidget {
@@ -515,6 +548,17 @@ class _LocationEditorState extends ConsumerState<_LocationEditor> {
   }
 
   Future<void> _save(MrMetadata metadata) async {
+    if (metadata.stateRestriction.stateRequired) {
+      try {
+        final message = await ref
+            .read(mrRepositoryProvider)
+            .requestStateAssignment();
+        if (mounted) _showError(context, message);
+      } catch (error) {
+        if (mounted) _showError(context, error);
+      }
+      return;
+    }
     if (!_formKey.currentState!.validate()) return;
     final lat = _number(_latitude.text);
     final lng = _number(_longitude.text);
@@ -586,6 +630,10 @@ class _LocationEditorState extends ConsumerState<_LocationEditor> {
           );
         }
         final metadata = snapshot.requireData;
+        final restriction = metadata.stateRestriction;
+        if (_stateId == null && restriction.appliesToCurrentUser) {
+          _stateId = restriction.employeeStateId;
+        }
         return Form(
           key: _formKey,
           child: Column(
@@ -611,7 +659,11 @@ class _LocationEditorState extends ConsumerState<_LocationEditor> {
                   label: 'State *',
                   value: _stateId,
                   options: metadata.states,
-                  onChanged: (value) => setState(() => _stateId = value),
+                  onChanged:
+                      restriction.appliesToCurrentUser &&
+                          restriction.employeeStateId != null
+                      ? null
+                      : (value) => setState(() => _stateId = value),
                 ),
                 _optionDropdown(
                   label: 'Branch *',
@@ -640,6 +692,14 @@ class _LocationEditorState extends ConsumerState<_LocationEditor> {
                 ),
               ]),
               const SizedBox(height: 20),
+              if (restriction.appliesToCurrentUser) ...[
+                _stateRestrictionBanner(
+                  context,
+                  restriction,
+                  restriction.stateRequired ? () => _save(metadata) : null,
+                ),
+                const SizedBox(height: 12),
+              ],
               Card(
                 color: VistoraColors.cyan.withValues(alpha: .07),
                 child: Padding(
@@ -1396,11 +1456,66 @@ Widget _responsiveFields(List<Widget> children) => LayoutBuilder(
   },
 );
 
+Widget _stateRestrictionBanner(
+  BuildContext context,
+  MrStateRestriction restriction,
+  VoidCallback? onRequest,
+) => Card(
+  color: restriction.stateRequired
+      ? VistoraColors.amber.withValues(alpha: .10)
+      : VistoraColors.cyan.withValues(alpha: .08),
+  child: Padding(
+    padding: const EdgeInsets.all(14),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(
+          restriction.stateRequired
+              ? Icons.warning_amber_rounded
+              : Icons.map_outlined,
+          color: restriction.stateRequired
+              ? VistoraColors.amber
+              : VistoraColors.cyan,
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                restriction.stateRequired
+                    ? 'Employment state is required'
+                    : 'State-restricted MR access',
+                style: const TextStyle(fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                restriction.stateRequired
+                    ? 'Ask your administrator to assign your employment state before adding doctors or locations.'
+                    : 'This workflow is limited to ${restriction.employeeStateName ?? 'your employment state'}.',
+                style: const TextStyle(color: VistoraColors.muted),
+              ),
+              if (onRequest != null) ...[
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: onRequest,
+                  icon: const Icon(Icons.email_outlined),
+                  label: const Text('Notify administrator'),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    ),
+  ),
+);
+
 Widget _optionDropdown({
   required String label,
   required int? value,
   required List<MrOption> options,
-  required ValueChanged<int?> onChanged,
+  required ValueChanged<int?>? onChanged,
 }) => DropdownButtonFormField<int>(
   value: options.any((item) => item.id == value) ? value : null,
   decoration: InputDecoration(labelText: label),
