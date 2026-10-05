@@ -20,7 +20,8 @@ class TaxInvoicesScreen extends ConsumerStatefulWidget {
   ConsumerState<TaxInvoicesScreen> createState() => _TaxInvoicesScreenState();
 }
 
-class _TaxInvoicesScreenState extends ConsumerState<TaxInvoicesScreen> {
+class _TaxInvoicesScreenState extends ConsumerState<TaxInvoicesScreen>
+    with WidgetsBindingObserver {
   final _search = TextEditingController();
   Timer? _debounce;
   int _page = 1;
@@ -28,6 +29,7 @@ class _TaxInvoicesScreenState extends ConsumerState<TaxInvoicesScreen> {
   int? _year;
   int _perPage = 10;
   int? _openingId;
+  bool _refreshing = false;
   late Future<TaxInvoicePage> _future;
 
   TaxInvoiceRepository get repository => ref.read(taxInvoiceRepositoryProvider);
@@ -35,14 +37,23 @@ class _TaxInvoicesScreenState extends ConsumerState<TaxInvoicesScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _future = _load();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _debounce?.cancel();
     _search.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      unawaited(_refresh(reset: true));
+    }
   }
 
   Future<TaxInvoicePage> _load() => repository.list(
@@ -54,9 +65,15 @@ class _TaxInvoicesScreenState extends ConsumerState<TaxInvoicesScreen> {
   );
 
   Future<void> _refresh({bool reset = false}) async {
+    if (_refreshing) return;
+    _refreshing = true;
     if (reset) _page = 1;
-    setState(() => _future = _load());
-    await _future;
+    try {
+      setState(() => _future = _load());
+      await _future;
+    } finally {
+      _refreshing = false;
+    }
   }
 
   Future<void> _open(TaxInvoiceSummary invoice) async {

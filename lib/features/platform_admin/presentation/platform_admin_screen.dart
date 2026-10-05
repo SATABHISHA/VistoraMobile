@@ -8,6 +8,8 @@ import 'package:intl/intl.dart';
 import 'package:flutter/services.dart';
 import 'package:vistora_mobile/app/providers.dart';
 import 'package:vistora_mobile/app/theme/app_theme.dart';
+import 'package:vistora_mobile/features/billing/data/billing_repository.dart';
+import 'package:vistora_mobile/features/billing/domain/billing_models.dart';
 import 'package:vistora_mobile/features/platform_admin/data/platform_repository.dart';
 import 'package:vistora_mobile/features/platform_admin/domain/platform_models.dart';
 import 'package:vistora_mobile/features/tax_invoices/presentation/tax_invoice_view.dart';
@@ -2357,6 +2359,9 @@ class _PaymentEditorSheetState extends State<_PaymentEditorSheet> {
   void initState() {
     super.initState();
     final payment = widget.payment;
+    final providerGstReady =
+        widget.settings.gstEnabled &&
+        widget.settings.providerGstin?.trim().isNotEmpty == true;
     _corpId = payment?.corpId ?? widget.tenants.first.corpId;
     _paymentType = payment?.paymentType ?? 'period';
     _periodType =
@@ -2373,9 +2378,7 @@ class _PaymentEditorSheetState extends State<_PaymentEditorSheet> {
     _paymentDate = payment?.paymentDate ?? DateTime.now();
     _customStart = payment?.periodStart;
     _customEnd = payment?.periodEnd;
-    _gstEnabled =
-        payment?.gstEnabled ??
-        (widget.settings.gstEnabled && tenant.gstin != null);
+    _gstEnabled = payment?.gstEnabled ?? providerGstReady;
     _amount = TextEditingController(
       text: payment == null ? '' : payment.packageAmount.toStringAsFixed(2),
     );
@@ -2399,7 +2402,9 @@ class _PaymentEditorSheetState extends State<_PaymentEditorSheet> {
   Widget build(BuildContext context) {
     final money = NumberFormat.currency(locale: 'en_IN', symbol: '₹');
     final period = _periodRange();
-    final canApplyGst = widget.settings.gstEnabled && tenant.gstin != null;
+    final canApplyGst =
+        widget.settings.gstEnabled &&
+        widget.settings.providerGstin?.trim().isNotEmpty == true;
     return DraggableScrollableSheet(
       expand: false,
       initialChildSize: 0.94,
@@ -2440,6 +2445,7 @@ class _PaymentEditorSheetState extends State<_PaymentEditorSheet> {
             ),
             const SizedBox(height: 18),
             DropdownButtonFormField<String>(
+              isExpanded: true,
               value: _corpId,
               decoration: const InputDecoration(
                 labelText: 'Company',
@@ -2451,6 +2457,7 @@ class _PaymentEditorSheetState extends State<_PaymentEditorSheet> {
                       value: item.corpId,
                       child: Text(
                         '${item.companyName} · ${item.corpId}',
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -2460,7 +2467,6 @@ class _PaymentEditorSheetState extends State<_PaymentEditorSheet> {
                   ? null
                   : (value) => setState(() {
                       _corpId = value ?? _corpId;
-                      if (tenant.gstin == null) _gstEnabled = false;
                     }),
             ),
             const SizedBox(height: 10),
@@ -2491,7 +2497,7 @@ class _PaymentEditorSheetState extends State<_PaymentEditorSheet> {
                   Expanded(
                     child: Text(
                       tenant.gstin == null
-                          ? 'No company GSTIN. This invoice must be recorded without GST.'
+                          ? 'No company GSTIN configured. GST can still be applied; the client GSTIN will be shown as not provided.'
                           : 'Company GSTIN: ${tenant.gstin}',
                     ),
                   ),
@@ -2611,9 +2617,9 @@ class _PaymentEditorSheetState extends State<_PaymentEditorSheet> {
               subtitle: Text(
                 !widget.settings.gstEnabled
                     ? 'GST is disabled in platform settings.'
-                    : tenant.gstin == null
-                    ? 'Add the company GSTIN before applying GST.'
-                    : 'Calculate tax using the configured rates.',
+                    : !canApplyGst
+                    ? 'Add the provider GSTIN before applying GST.'
+                    : 'Calculate tax using the configured rates. Tenant GSTIN is optional.',
               ),
               onChanged: canApplyGst
                   ? (value) => setState(() => _gstEnabled = value)
@@ -2911,6 +2917,9 @@ class _BillingSettingsViewState extends ConsumerState<_BillingSettingsView> {
 
   PlatformRepository get repository => ref.read(platformRepositoryProvider);
 
+  BillingRepository get billingRepository =>
+      BillingRepository(ref.read(apiClientProvider));
+
   @override
   void initState() {
     super.initState();
@@ -3110,6 +3119,25 @@ class _BillingSettingsViewState extends ConsumerState<_BillingSettingsView> {
     }
   }
 
+  Future<void> _openGatewaySettings() async {
+    try {
+      final config = await billingRepository.gatewaySettings();
+      if (!mounted) return;
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        backgroundColor: VistoraColors.background,
+        builder: (_) => _MobileGatewayEditorSheet(
+          initial: config,
+          repository: billingRepository,
+        ),
+      );
+    } catch (error) {
+      if (mounted) _toast(context, error.toString(), error: true);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator());
@@ -3209,6 +3237,49 @@ class _BillingSettingsViewState extends ConsumerState<_BillingSettingsView> {
         ),
         const SizedBox(height: 24),
         const _SectionHeader(
+          eyebrow: 'CLIENT PAYMENTS',
+          title: 'Payment gateway',
+          subtitle:
+              'Enable Razorpay or Cashfree for tenant bill payments. Secrets remain encrypted on the server.',
+        ),
+        const SizedBox(height: 16),
+        Card(
+          margin: EdgeInsets.zero,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    color: VistoraColors.cyan.withValues(alpha: .13),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: const Icon(
+                    Icons.account_balance_wallet_outlined,
+                    color: VistoraColors.cyan,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                const Expanded(
+                  child: Text(
+                    'Configure online bill payments, provider credentials, environment and webhook secrets.',
+                    style: TextStyle(color: VistoraColors.muted),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                FilledButton.tonalIcon(
+                  onPressed: _openGatewaySettings,
+                  icon: const Icon(Icons.settings_outlined),
+                  label: const Text('Open'),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+        const _SectionHeader(
           eyebrow: 'PLATFORM BILLING',
           title: 'Invoice identity & GST',
           subtitle:
@@ -3293,7 +3364,7 @@ class _BillingSettingsViewState extends ConsumerState<_BillingSettingsView> {
                     style: TextStyle(fontWeight: FontWeight.w900),
                   ),
                   subtitle: const Text(
-                    'A tenant GSTIN is also required before GST can be charged.',
+                    'A tenant GSTIN is optional. GST can be charged when provider GST billing is enabled.',
                   ),
                   onChanged: (value) => setState(() => _gstEnabled = value),
                 ),
@@ -3424,6 +3495,216 @@ class _BillingSettingsViewState extends ConsumerState<_BillingSettingsView> {
       ],
     );
   }
+}
+
+class _MobileGatewayEditorSheet extends StatefulWidget {
+  const _MobileGatewayEditorSheet({
+    required this.initial,
+    required this.repository,
+  });
+
+  final PaymentGatewayConfig initial;
+  final BillingRepository repository;
+
+  @override
+  State<_MobileGatewayEditorSheet> createState() =>
+      _MobileGatewayEditorSheetState();
+}
+
+class _MobileGatewayEditorSheetState extends State<_MobileGatewayEditorSheet> {
+  late bool enabled;
+  late String provider;
+  late String environment;
+  final keyId = TextEditingController();
+  final keySecret = TextEditingController();
+  final razorpayWebhook = TextEditingController();
+  final appId = TextEditingController();
+  final secret = TextEditingController();
+  final cashfreeWebhook = TextEditingController();
+  bool saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    enabled = widget.initial.enabled;
+    provider = widget.initial.provider ?? 'razorpay';
+    environment = widget.initial.cashfreeEnvironment;
+    keyId.text = widget.initial.razorpayKeyId ?? '';
+    appId.text = widget.initial.cashfreeAppId ?? '';
+  }
+
+  @override
+  void dispose() {
+    for (final controller in [
+      keyId,
+      keySecret,
+      razorpayWebhook,
+      appId,
+      secret,
+      cashfreeWebhook,
+    ]) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (saving) return;
+    setState(() => saving = true);
+    try {
+      await widget.repository.saveGatewaySettings(
+        PaymentGatewayDraft(
+          enabled: enabled,
+          provider: provider,
+          cashfreeEnvironment: environment,
+          razorpayKeyId: keyId.text,
+          razorpayKeySecret: keySecret.text,
+          razorpayWebhookSecret: razorpayWebhook.text,
+          cashfreeAppId: appId.text,
+          cashfreeSecretKey: secret.text,
+          cashfreeWebhookSecret: cashfreeWebhook.text,
+        ),
+      );
+      if (!mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Payment gateway settings saved.')),
+      );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.toString())));
+      }
+    } finally {
+      if (mounted) setState(() => saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: EdgeInsets.only(
+      left: 18,
+      right: 18,
+      top: 18,
+      bottom: MediaQuery.viewInsetsOf(context).bottom + 18,
+    ),
+    child: SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'Payment gateway settings',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Secrets are encrypted by the server and are never returned to the app.',
+            style: TextStyle(color: VistoraColors.muted),
+          ),
+          SwitchListTile.adaptive(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Accept online bill payments'),
+            subtitle: const Text(
+              'Disable this when tenants should pay offline and receive a manually confirmed invoice.',
+            ),
+            value: enabled,
+            onChanged: (value) => setState(() => enabled = value),
+          ),
+          DropdownButtonFormField<String>(
+            isExpanded: true,
+            value: provider,
+            decoration: const InputDecoration(labelText: 'Active provider'),
+            items: const [
+              DropdownMenuItem(value: 'razorpay', child: Text('Razorpay')),
+              DropdownMenuItem(value: 'cashfree', child: Text('Cashfree')),
+            ],
+            onChanged: (value) => setState(() => provider = value ?? provider),
+          ),
+          const SizedBox(height: 14),
+          if (provider == 'razorpay') ...[
+            TextField(
+              controller: keyId,
+              decoration: const InputDecoration(labelText: 'Razorpay key ID'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: keySecret,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: 'Razorpay key secret',
+                hintText: 'Leave blank to keep saved secret',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: razorpayWebhook,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: 'Razorpay webhook secret',
+                hintText: 'Optional, recommended for automatic confirmation',
+              ),
+            ),
+          ] else ...[
+            TextField(
+              controller: appId,
+              decoration: const InputDecoration(labelText: 'Cashfree app ID'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: secret,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: 'Cashfree secret key',
+                hintText: 'Leave blank to keep saved secret',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: cashfreeWebhook,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: 'Cashfree webhook secret',
+                hintText: 'Optional, defaults to Cashfree secret key',
+              ),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              isExpanded: true,
+              value: environment,
+              decoration: const InputDecoration(
+                labelText: 'Cashfree environment',
+              ),
+              items: const [
+                DropdownMenuItem(
+                  value: 'sandbox',
+                  child: Text('Sandbox / testing'),
+                ),
+                DropdownMenuItem(
+                  value: 'production',
+                  child: Text('Production'),
+                ),
+              ],
+              onChanged: (value) =>
+                  setState(() => environment = value ?? environment),
+            ),
+          ],
+          const SizedBox(height: 18),
+          FilledButton.icon(
+            onPressed: saving ? null : _save,
+            icon: saving
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.save_outlined),
+            label: Text(saving ? 'Saving...' : 'Save gateway settings'),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 class _SectionHeader extends StatelessWidget {

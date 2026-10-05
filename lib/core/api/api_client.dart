@@ -53,6 +53,9 @@ class ApiClient {
   Future<Map<String, dynamic>> put(String path, {Object? data}) =>
       _request('PUT', path, data: data);
 
+  Future<Map<String, dynamic>> patch(String path, {Object? data}) =>
+      _request('PATCH', path, data: data);
+
   Future<Map<String, dynamic>> delete(String path, {Object? data}) =>
       _request('DELETE', path, data: data);
 

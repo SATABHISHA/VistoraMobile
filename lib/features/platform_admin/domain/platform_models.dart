@@ -32,6 +32,7 @@ class PlatformTenant {
     required this.financeHubEnabled,
     this.gstin,
     this.phone,
+    this.billingEmail,
     this.registeredAddress,
     this.timezone,
     this.locale,
@@ -51,6 +52,7 @@ class PlatformTenant {
   final bool financeHubEnabled;
   final String? gstin;
   final String? phone;
+  final String? billingEmail;
   final String? registeredAddress;
   final String? timezone;
   final String? locale;
@@ -76,6 +78,7 @@ class PlatformTenant {
         asInt(json['finance_hub_enabled']) == 1,
     gstin: asNullableString(json['gstin']),
     phone: asNullableString(json['phone']),
+    billingEmail: asNullableString(json['billing_email']),
     registeredAddress: asNullableString(json['registered_address']),
     timezone: asNullableString(json['timezone']),
     locale: asNullableString(json['locale']),

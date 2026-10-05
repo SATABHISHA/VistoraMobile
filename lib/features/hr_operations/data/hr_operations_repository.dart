@@ -19,6 +19,10 @@ class HrOperationsRepository {
   Future<HrPage<RecruitmentCandidate>> candidates({
     String? query,
     String? status,
+    String? interviewView,
+    String? interviewMode,
+    String? interviewDateFrom,
+    String? interviewDateTo,
     int page = 1,
     int perPage = 10,
   }) async => _page(
@@ -27,6 +31,10 @@ class HrOperationsRepository {
       queryParameters: {
         'search': ?query,
         'status': ?status,
+        'interview_view': ?interviewView,
+        'interview_mode': ?interviewMode,
+        'interview_date_from': ?interviewDateFrom,
+        'interview_date_to': ?interviewDateTo,
         'page': page,
         'per_page': perPage,
       },
@@ -37,11 +45,15 @@ class HrOperationsRepository {
   Future<void> createCandidate(Map<String, dynamic> data) =>
       _api.post('/recruitment', data: data);
 
-  Future<Map<String, dynamic>> createApplicationLink({int? jobPostId}) async {
+  Future<Map<String, dynamic>> createApplicationLink({
+    int? jobPostId,
+    String validity = 'one_time',
+  }) async {
     final response = await _api.post(
       '/recruitment/application-links',
       data: {
         if (jobPostId != null) ...{'job_post_id': jobPostId},
+        'validity': validity,
       },
     );
     return asMap(asMap(response['data'])['link'])
@@ -58,7 +70,9 @@ class HrOperationsRepository {
     );
     return (
       sent: asMap(response['data'])['sent'] == true,
-      message: response['message']?.toString() ?? 'Unable to send application email.',
+      message:
+          response['message']?.toString() ??
+          'Unable to send application email.',
     );
   }
 
@@ -67,27 +81,92 @@ class HrOperationsRepository {
     data: {'action': action},
   );
 
-  Future<void> scheduleInterview({
+  Future<({bool rescheduled, String emailMessage})> scheduleInterview({
     required int candidateId,
     required DateTime scheduledAt,
     required List<int> panelistUserIds,
     required String mode,
     String? notes,
-  }) => _api.post(
-    '/recruitment/candidates/$candidateId/interviews',
-    data: {
-      'scheduled_at': scheduledAt.toIso8601String(),
-      'panelist_user_ids': panelistUserIds,
-      'mode': mode,
-      if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
-    },
-  );
+  }) async {
+    final response = await _api.post(
+      '/recruitment/candidates/$candidateId/interviews',
+      data: {
+        // Send an explicit UTC instant. The API also accepts the old released
+        // mobile format without an offset and interprets that in tenant time.
+        'scheduled_at': scheduledAt.toUtc().toIso8601String(),
+        'panelist_user_ids': panelistUserIds,
+        'mode': mode,
+        if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+      },
+    );
+    final data = asMap(response['data']);
+    final email = asMap(data['email']);
+    return (
+      rescheduled:
+          response['message']?.toString().toLowerCase().contains(
+            'rescheduled',
+          ) ==
+          true,
+      emailMessage:
+          email['message']?.toString() ?? 'Panelists notified in Vistora.',
+    );
+  }
+
+  Future<({bool rescheduled, String emailMessage})> rescheduleInterview({
+    required int interviewId,
+    required DateTime scheduledAt,
+    required List<int> panelistUserIds,
+    required String mode,
+    String? notes,
+  }) async {
+    final response = await _api.put(
+      '/recruitment/interviews/$interviewId',
+      data: {
+        'scheduled_at': scheduledAt.toUtc().toIso8601String(),
+        'panelist_user_ids': panelistUserIds,
+        'mode': mode,
+        if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+      },
+    );
+    final email = asMap(asMap(response['data'])['email']);
+    return (
+      rescheduled: true,
+      emailMessage:
+          email['message']?.toString() ?? 'Panelists notified in Vistora.',
+    );
+  }
 
   Future<List<LetterTemplate>> offerTemplates() async {
     final response = await _api.get('/recruitment/offer-templates');
     return asList(
       asMap(response['data'])['items'],
     ).map((item) => LetterTemplate.fromJson(asMap(item))).toList();
+  }
+
+  Future<
+    ({
+      List<RecruitmentCandidate> candidates,
+      List<LetterTemplate> templates,
+      List<OfferPayGroupOption> payGroups,
+    })
+  >
+  offerOptions({int? year}) async {
+    final response = await _api.get(
+      '/recruitment/offer-options',
+      queryParameters: {'year': ?year},
+    );
+    final data = asMap(response['data']);
+    return (
+      candidates: asList(data['candidates'])
+          .map((item) => RecruitmentCandidate.fromJson(asMap(item)))
+          .toList(growable: false),
+      templates: asList(data['templates'])
+          .map((item) => LetterTemplate.fromJson(asMap(item)))
+          .toList(growable: false),
+      payGroups: asList(data['pay_groups'])
+          .map((item) => OfferPayGroupOption.fromJson(asMap(item)))
+          .toList(growable: false),
+    );
   }
 
   Future<void> saveOfferTemplate({
@@ -129,6 +208,8 @@ class HrOperationsRepository {
     required String position,
     required DateTime startDate,
     required double ctc,
+    int? payGroupId,
+    List<Map<String, dynamic>> components = const [],
   }) => _api.post(
     '/recruitment/candidates/$candidateId/offer-letter',
     data: {
@@ -136,6 +217,8 @@ class HrOperationsRepository {
       'position': position,
       'start_date': _date(startDate),
       'offered_ctc': ctc,
+      if (payGroupId != null) 'pay_group_id': payGroupId,
+      'components': components,
     },
   );
 

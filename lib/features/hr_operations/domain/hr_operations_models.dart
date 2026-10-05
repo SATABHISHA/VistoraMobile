@@ -1,4 +1,5 @@
 import 'package:vistora_mobile/core/api/api_parsing.dart';
+import 'package:vistora_mobile/features/salary/domain/salary_models.dart';
 
 class HrPage<T> {
   const HrPage({
@@ -51,6 +52,93 @@ class HrEmployee {
   }
 }
 
+class RecruitmentPanelist {
+  const RecruitmentPanelist({required this.id, required this.name, this.email});
+  final int id;
+  final String name;
+  final String? email;
+
+  factory RecruitmentPanelist.fromJson(Map<String, dynamic> json) =>
+      RecruitmentPanelist(
+        id: asInt(json['id']),
+        name: json['name']?.toString() ?? 'Panelist',
+        email: asNullableString(json['email']),
+      );
+}
+
+class RecruitmentFeedback {
+  const RecruitmentFeedback({
+    required this.panelistUserId,
+    required this.panelistName,
+    required this.rating,
+    required this.recommendation,
+    required this.feedback,
+    this.submittedAt,
+  });
+
+  final int panelistUserId;
+  final String panelistName;
+  final int rating;
+  final String recommendation;
+  final String feedback;
+  final DateTime? submittedAt;
+
+  factory RecruitmentFeedback.fromJson(Map<String, dynamic> json) {
+    final panelist = asMap(json['panelist']);
+    final panelistId = asInt(json['panelist_user_id']);
+    return RecruitmentFeedback(
+      panelistUserId: panelistId,
+      panelistName:
+          asNullableString(panelist['name']) ??
+          asNullableString(json['panelist_name']) ??
+          'Panelist #$panelistId',
+      rating: asInt(json['rating']),
+      recommendation: json['recommendation']?.toString() ?? 'review',
+      feedback: json['feedback']?.toString() ?? '',
+      submittedAt: asDateTime(json['submitted_at']),
+    );
+  }
+}
+
+class RecruitmentInterview {
+  const RecruitmentInterview({
+    required this.id,
+    required this.scheduledAt,
+    required this.mode,
+    required this.status,
+    required this.panelists,
+    this.feedback = const [],
+    this.notes,
+  });
+  final int id;
+  final DateTime scheduledAt;
+  final String mode;
+  final String status;
+  final String? notes;
+  final List<RecruitmentPanelist> panelists;
+  final List<RecruitmentFeedback> feedback;
+
+  factory RecruitmentInterview.fromJson(Map<String, dynamic> json) =>
+      RecruitmentInterview(
+        id: asInt(json['id']),
+        scheduledAt:
+            asTenantLocalDateTime(
+              json['scheduled_at_local'],
+              json['scheduled_at'],
+            ) ??
+            DateTime.now(),
+        mode: json['mode']?.toString() ?? 'in_person',
+        status: json['status']?.toString() ?? 'scheduled',
+        notes: asNullableString(json['notes']),
+        panelists: asList(
+          json['panelists'],
+        ).map((item) => RecruitmentPanelist.fromJson(asMap(item))).toList(),
+        feedback: asList(
+          json['feedback'],
+        ).map((item) => RecruitmentFeedback.fromJson(asMap(item))).toList(),
+      );
+}
+
 class RecruitmentCandidate {
   const RecruitmentCandidate({
     required this.id,
@@ -60,7 +148,9 @@ class RecruitmentCandidate {
     this.phone,
     this.position,
     this.source,
+    this.recruitedEmployeeId,
     this.interviewCount = 0,
+    this.interviews = const [],
   });
   final int id;
   final String name;
@@ -69,12 +159,21 @@ class RecruitmentCandidate {
   final String? phone;
   final String? position;
   final String? source;
+  final int? recruitedEmployeeId;
   final int interviewCount;
+  final List<RecruitmentInterview> interviews;
+
+  List<RecruitmentFeedback> get interviewFeedback => interviews
+      .expand((interview) => interview.feedback)
+      .toList(growable: false);
 
   factory RecruitmentCandidate.fromJson(Map<String, dynamic> json) {
     final name = [json['first_name'], json['last_name']]
         .where((item) => item != null && item.toString().trim().isNotEmpty)
         .join(' ');
+    final interviews = asList(
+      json['interviews'],
+    ).map((item) => RecruitmentInterview.fromJson(asMap(item))).toList();
     return RecruitmentCandidate(
       id: asInt(json['id']),
       name: name.isEmpty ? 'Candidate' : name,
@@ -83,8 +182,103 @@ class RecruitmentCandidate {
       phone: asNullableString(json['phone']),
       position: asNullableString(json['position']),
       source: asNullableString(json['source']),
-      interviewCount: asList(json['interviews']).length,
+      recruitedEmployeeId: json['recruited_employee_id'] == null
+          ? null
+          : asInt(json['recruited_employee_id']),
+      interviewCount: interviews.length,
+      interviews: interviews,
     );
+  }
+}
+
+class SalaryStructureOption {
+  const SalaryStructureOption({
+    required this.id,
+    required this.employeeId,
+    required this.employeeName,
+    required this.employeeCode,
+    required this.payGroupName,
+    required this.ctcAnnual,
+    this.components = const [],
+  });
+
+  final int id;
+  final int employeeId;
+  final String employeeName;
+  final String employeeCode;
+  final String payGroupName;
+  final double ctcAnnual;
+  final List<Map<String, dynamic>> components;
+
+  factory SalaryStructureOption.fromJson(Map<String, dynamic> json) {
+    final employee = asMap(json['employee']);
+    final employeeName =
+        [employee['first_name'], employee['middle_name'], employee['last_name']]
+            .where((item) => item != null && item.toString().trim().isNotEmpty)
+            .join(' ');
+    return SalaryStructureOption(
+      id: asInt(json['id']),
+      employeeId: asInt(json['employee_id']),
+      employeeName: employeeName.isEmpty ? 'Employee' : employeeName,
+      employeeCode: employee['emp_code']?.toString() ?? '—',
+      payGroupName: json['pay_group_name']?.toString() ?? 'Salary structure',
+      ctcAnnual: asDouble(json['ctc_annual']),
+      components: asList(
+        json['components'],
+      ).map((item) => asMap(item)).toList(growable: false),
+    );
+  }
+}
+
+class OfferPayGroupOption {
+  const OfferPayGroupOption({
+    required this.id,
+    required this.name,
+    this.components = const [],
+    this.formulas = const [],
+    this.componentNames = const [],
+  });
+
+  final int id;
+  final String name;
+  final List<SalaryPayComponent> components;
+  final List<SalaryFormula> formulas;
+  final List<String> componentNames;
+
+  List<String> get displayComponentNames => componentNames.isNotEmpty
+      ? componentNames
+      : components.map((component) => component.name).toList(growable: false);
+
+  factory OfferPayGroupOption.fromJson(Map<String, dynamic> json) {
+    final components = asList(json['components'])
+        .map((item) => SalaryPayComponent.fromJson(asMap(item)))
+        .toList(growable: false);
+    return OfferPayGroupOption(
+      id: asInt(json['id']),
+      name: json['name']?.toString() ?? 'Pay component group',
+      components: components,
+      formulas: asList(json['formulas'])
+          .map((item) => SalaryFormula.fromJson(asMap(item)))
+          .toList(growable: false),
+      componentNames: asList(json['component_names'])
+          .map((item) => item.toString())
+          .where((item) => item.trim().isNotEmpty)
+          .toList(growable: false),
+    );
+  }
+
+  SalaryBreakup calculate(double annualCtc) {
+    final group = SalaryPayGroup(
+      id: id,
+      name: name,
+      componentIds: components.map((component) => component.id).toList(),
+    );
+    final designer = SalaryDesignerState(
+      components: components,
+      payGroups: [group],
+      formulas: formulas,
+    );
+    return designer.calculate(group, annualCtc);
   }
 }
 

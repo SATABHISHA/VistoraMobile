@@ -23,6 +23,67 @@ void main() {
     expect(project.assignmentFor(99), isNull);
   });
 
+  test('parses submitted project updates for employee and team views', () {
+    final project = EmployeeProject.fromJson({
+      'id': 5,
+      'code': 'UPD-01',
+      'name': 'Project Updates',
+      'status': 'active',
+      'health_status': 'green',
+      'assignments': [
+        {
+          'id': 10,
+          'employee_id': 18,
+          'role': 'Member',
+          'status': 'assigned',
+          'updates': [
+            {
+              'id': 21,
+              'period_type': 'weekly',
+              'period_start': '2026-10-04',
+              'progress_percent': 60,
+              'achievements': 'Meera submitted an update.',
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(project.assignmentFor(18)?.updates.single.progressPercent, 60);
+    expect(
+      project.assignmentFor(18)?.updates.single.achievements,
+      'Meera submitted an update.',
+    );
+  });
+
+  test(
+    'resolves a missing project supervisor from assigned supervisor data',
+    () {
+      final project = EmployeeProject.fromJson({
+        'id': 6,
+        'code': 'SUP-01',
+        'name': 'Supervisor fallback',
+        'assignments': [
+          {
+            'id': 11,
+            'employee_id': 22,
+            'role': 'Member',
+            'employee': {
+              'id': 22,
+              'emp_code': 'EMP022',
+              'first_name': 'Priya',
+              'last_name': 'Gupta',
+              'role_type': 'Supervisor',
+            },
+          },
+        ],
+      });
+
+      expect(project.supervisorId, 22);
+      expect(project.supervisorName, 'Priya Gupta');
+    },
+  );
+
   test('finds current panelist interview feedback', () {
     final task = InterviewTask.fromJson({
       'id': 7,

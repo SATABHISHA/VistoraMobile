@@ -7,8 +7,10 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:vistora_mobile/app/providers.dart';
 import 'package:vistora_mobile/app/theme/app_theme.dart';
+import 'package:vistora_mobile/core/widgets/status_badge.dart';
 import 'package:vistora_mobile/features/hr_operations/data/hr_operations_repository.dart';
 import 'package:vistora_mobile/features/hr_operations/domain/hr_operations_models.dart';
+import 'package:vistora_mobile/features/salary/domain/salary_models.dart';
 
 final hrOperationsRepositoryProvider = Provider<HrOperationsRepository>(
   (ref) => HrOperationsRepository(ref.watch(apiClientProvider)),
@@ -80,6 +82,10 @@ class _RecruitmentTabState extends ConsumerState<_RecruitmentTab> {
   final _search = TextEditingController();
   Timer? _debounce;
   String? _status;
+  String _interviewView = 'assigned';
+  String? _interviewMode;
+  DateTime? _interviewFrom;
+  DateTime? _interviewTo;
   int _page = 1;
   bool _busy = false;
   late Future<HrPage<RecruitmentCandidate>> _future;
@@ -102,11 +108,21 @@ class _RecruitmentTabState extends ConsumerState<_RecruitmentTab> {
   Future<HrPage<RecruitmentCandidate>> _load() => repository.candidates(
     query: _search.text.trim().isEmpty ? null : _search.text.trim(),
     status: _status,
+    interviewView: _status == 'interview' ? _interviewView : null,
+    interviewMode: _status == 'interview' ? _interviewMode : null,
+    interviewDateFrom: _status == 'interview' && _interviewFrom != null
+        ? _date(_interviewFrom!)
+        : null,
+    interviewDateTo: _status == 'interview' && _interviewTo != null
+        ? _date(_interviewTo!)
+        : null,
     page: _page,
   );
   Future<void> _refresh({bool reset = false}) async {
     if (reset) _page = 1;
-    setState(() => _future = _load());
+    setState(() {
+      _future = _load();
+    });
     await _future;
   }
 
@@ -116,6 +132,41 @@ class _RecruitmentTabState extends ConsumerState<_RecruitmentTab> {
       if (mounted) _refresh(reset: true);
     });
   }
+
+  Future<void> _pickInterviewDate({required bool from}) async {
+    final initial = from
+        ? (_interviewFrom ?? DateTime.now())
+        : (_interviewTo ?? _interviewFrom ?? DateTime.now());
+    final value = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now().add(const Duration(days: 730)),
+    );
+    if (value == null || !mounted) return;
+    if (from) {
+      _interviewFrom = value;
+      if (_interviewTo != null && _interviewTo!.isBefore(value)) {
+        _interviewTo = value;
+      }
+    } else {
+      _interviewTo = value;
+      if (_interviewFrom != null && _interviewFrom!.isAfter(value)) {
+        _interviewFrom = value;
+      }
+    }
+    await _refresh(reset: true);
+  }
+
+  void _clearInterviewFilters() {
+    _interviewMode = null;
+    _interviewFrom = null;
+    _interviewTo = null;
+    _refresh(reset: true);
+  }
+
+  static String _date(DateTime value) =>
+      '${value.year.toString().padLeft(4, '0')}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
 
   Future<void> _mutate(Future<void> Function() action, String message) async {
     if (_busy) return;
@@ -157,6 +208,13 @@ class _RecruitmentTabState extends ConsumerState<_RecruitmentTab> {
 
   Future<void> _schedule(RecruitmentCandidate candidate) async {
     final employees = await repository.employees();
+    final activeInterview = candidate.interviews
+        .where((item) => item.status == 'scheduled')
+        .fold<RecruitmentInterview?>(
+          null,
+          (latest, item) =>
+              latest == null || item.id > latest.id ? item : latest,
+        );
     if (!mounted) return;
     final result = await showModalBottomSheet<_InterviewInput>(
       context: context,
@@ -165,19 +223,39 @@ class _RecruitmentTabState extends ConsumerState<_RecruitmentTab> {
       builder: (_) => _InterviewEditor(
         candidate: candidate,
         employees: employees.where((item) => item.userId != null).toList(),
+        initialInterview: activeInterview,
       ),
     );
     if (result != null && mounted) {
-      await _mutate(
-        () => repository.scheduleInterview(
-          candidateId: candidate.id,
-          scheduledAt: result.scheduledAt,
-          panelistUserIds: result.panelistUserIds,
-          mode: result.mode,
-          notes: result.notes,
-        ),
-        'Interview scheduled and panelists notified.',
-      );
+      if (_busy) return;
+      setState(() => _busy = true);
+      try {
+        final delivery = activeInterview == null
+            ? await repository.scheduleInterview(
+                candidateId: candidate.id,
+                scheduledAt: result.scheduledAt,
+                panelistUserIds: result.panelistUserIds,
+                mode: result.mode,
+                notes: result.notes,
+              )
+            : await repository.rescheduleInterview(
+                interviewId: activeInterview.id,
+                scheduledAt: result.scheduledAt,
+                panelistUserIds: result.panelistUserIds,
+                mode: result.mode,
+                notes: result.notes,
+              );
+        await _refresh();
+        if (mounted) {
+          _toast(
+            '${activeInterview == null ? 'Interview scheduled' : 'Interview rescheduled'}. ${delivery.emailMessage}',
+          );
+        }
+      } catch (error) {
+        if (mounted) _toast(error.toString(), error: true);
+      } finally {
+        if (mounted) setState(() => _busy = false);
+      }
     }
   }
 
@@ -242,6 +320,106 @@ class _RecruitmentTabState extends ConsumerState<_RecruitmentTab> {
                     _refresh(reset: true);
                   },
                 ),
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      ChoiceChip(
+                        label: const Text('All candidates'),
+                        selected: _status == null,
+                        onSelected: (_) {
+                          setState(() => _status = null);
+                          _refresh(reset: true);
+                        },
+                      ),
+                      ChoiceChip(
+                        label: const Text('Selected candidates'),
+                        selected: _status == 'selected',
+                        onSelected: (_) {
+                          setState(() => _status = 'selected');
+                          _refresh(reset: true);
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                if (_status == 'interview') ...[
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final tab in const [
+                        ('assigned', 'Assigned interviews'),
+                        ('completed', 'Completed interviews'),
+                        ('all', 'All interviews'),
+                      ])
+                        ChoiceChip(
+                          selected: _interviewView == tab.$1,
+                          label: Text(tab.$2),
+                          onSelected: (_) {
+                            setState(() => _interviewView = tab.$1);
+                            _refresh(reset: true);
+                          },
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String?>(
+                    value: _interviewMode,
+                    decoration: const InputDecoration(
+                      labelText: 'Interview mode',
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: null, child: Text('All modes')),
+                      DropdownMenuItem(
+                        value: 'in_person',
+                        child: Text('In person'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'virtual',
+                        child: Text('Virtual'),
+                      ),
+                      DropdownMenuItem(value: 'phone', child: Text('Phone')),
+                    ],
+                    onChanged: (value) {
+                      setState(() => _interviewMode = value);
+                      _refresh(reset: true);
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: () => _pickInterviewDate(from: true),
+                        icon: const Icon(Icons.calendar_month_outlined),
+                        label: Text(
+                          _interviewFrom == null
+                              ? 'From date'
+                              : DateFormat.yMMMd().format(_interviewFrom!),
+                        ),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: () => _pickInterviewDate(from: false),
+                        icon: const Icon(Icons.event_outlined),
+                        label: Text(
+                          _interviewTo == null
+                              ? 'To date'
+                              : DateFormat.yMMMd().format(_interviewTo!),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: _clearInterviewFilters,
+                        child: const Text('Clear interview filters'),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
@@ -317,9 +495,39 @@ class _RecruitmentTabState extends ConsumerState<_RecruitmentTab> {
   );
 
   Future<void> _generateApplicationLink() async {
+    final validity = await showModalBottomSheet<String>(
+      context: context,
+      useSafeArea: true,
+      builder: (context) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.all(18),
+          children: [
+            const Text(
+              'Application link validity',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+            ),
+            for (final option in const [
+              ('one_time', 'One-time link', 'Closes after one application'),
+              ('24_hours', '24 hours', 'Valid for one day'),
+              ('7_days', '7 days', 'Valid for one week'),
+              ('30_days', '30 days', 'Valid for one month'),
+              ('unlimited', 'Unlimited', 'Open until manually exhausted'),
+            ])
+              ListTile(
+                leading: const Icon(Icons.link_outlined),
+                title: Text(option.$2),
+                subtitle: Text(option.$3),
+                onTap: () => Navigator.pop(context, option.$1),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (validity == null || !mounted) return;
     setState(() => _busy = true);
     try {
-      final link = await repository.createApplicationLink();
+      final link = await repository.createApplicationLink(validity: validity);
       if (!mounted) return;
       await showDialog<void>(
         context: context,
@@ -387,6 +595,16 @@ class _RecruitmentTabState extends ConsumerState<_RecruitmentTab> {
             '${item.source ?? 'Direct'} • ${item.phone ?? 'No phone'} • ${item.interviewCount} interview(s)',
             style: Theme.of(context).textTheme.bodySmall,
           ),
+          if (item.interviews.isNotEmpty)
+            Text(
+              _interviewSummary(item.interviews),
+              style: const TextStyle(color: VistoraColors.cyan),
+            ),
+          if (item.interviewFeedback.isNotEmpty)
+            Text(
+              '${item.interviewFeedback.length} panelist review${item.interviewFeedback.length == 1 ? '' : 's'} available',
+              style: const TextStyle(color: VistoraColors.green),
+            ),
           const Divider(height: 24),
           Wrap(
             spacing: 7,
@@ -415,6 +633,34 @@ class _RecruitmentTabState extends ConsumerState<_RecruitmentTab> {
                         ? 'Reschedule'
                         : 'Schedule interview',
                   ),
+                ),
+              if (item.interviews.isNotEmpty)
+                OutlinedButton.icon(
+                  onPressed: _busy || item.interviewFeedback.isEmpty
+                      ? null
+                      : () => _showInterviewFeedback(item),
+                  icon: const Icon(Icons.forum_outlined),
+                  label: Text(
+                    item.interviewFeedback.isEmpty
+                        ? 'Feedback pending'
+                        : 'View feedback (${item.interviewFeedback.length})',
+                  ),
+                ),
+              if (const {
+                'selected',
+                'offered',
+                'joined',
+                'rejected',
+              }.contains(item.status))
+                OutlinedButton.icon(
+                  onPressed: _busy
+                      ? null
+                      : () => _mutate(
+                          () => repository.pipelineAction(item.id, 'back'),
+                          'Candidate rolled back to the previous pipeline step.',
+                        ),
+                  icon: const Icon(Icons.undo_outlined),
+                  label: const Text('Rollback'),
                 ),
               if (item.status == 'interview')
                 FilledButton.tonal(
@@ -462,6 +708,177 @@ class _RecruitmentTabState extends ConsumerState<_RecruitmentTab> {
       ),
     ),
   );
+
+  String _interviewSummary(List<RecruitmentInterview> interviews) {
+    final active = interviews
+        .where((item) => item.status == 'scheduled')
+        .fold<RecruitmentInterview?>(
+          null,
+          (latest, item) =>
+              latest == null || item.id > latest.id ? item : latest,
+        );
+    if (active == null) return 'Interview history available';
+    final names = active.panelists.map((item) => item.name).join(', ');
+    final when = DateFormat.yMMMd().add_jm().format(active.scheduledAt);
+    return names.isEmpty ? 'Scheduled $when' : 'Panel: $names · $when';
+  }
+
+  Future<void> _showInterviewFeedback(RecruitmentCandidate candidate) async {
+    final feedback = candidate.interviewFeedback;
+    if (feedback.isEmpty) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) =>
+          _InterviewFeedbackSheet(candidate: candidate, feedback: feedback),
+    );
+  }
+}
+
+class _InterviewFeedbackSheet extends StatelessWidget {
+  const _InterviewFeedbackSheet({
+    required this.candidate,
+    required this.feedback,
+  });
+
+  final RecruitmentCandidate candidate;
+  final List<RecruitmentFeedback> feedback;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: EdgeInsets.fromLTRB(
+      20,
+      22,
+      20,
+      MediaQuery.viewInsetsOf(context).bottom + 20,
+    ),
+    child: SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              gradient: const LinearGradient(
+                colors: [Color(0x332D1B69), Color(0x2230A7C9)],
+              ),
+              border: Border.all(color: const Color(0x4430A7C9)),
+            ),
+            child: Row(
+              children: [
+                const CircleAvatar(
+                  backgroundColor: Color(0x33FF6B00),
+                  child: Icon(
+                    Icons.forum_outlined,
+                    color: VistoraColors.orange,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Interview feedback',
+                        style: TextStyle(fontWeight: FontWeight.w900),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        '${candidate.name} · ${feedback.length} panelist review${feedback.length == 1 ? '' : 's'}',
+                        style: const TextStyle(color: VistoraColors.muted),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          for (var index = 0; index < feedback.length; index++)
+            _feedbackCard(context, feedback[index], index),
+        ],
+      ),
+    ),
+  );
+
+  Widget _feedbackCard(
+    BuildContext context,
+    RecruitmentFeedback item,
+    int index,
+  ) => TweenAnimationBuilder<double>(
+    duration: Duration(milliseconds: 300 + (index * 70)),
+    tween: Tween(begin: 0, end: 1),
+    builder: (context, value, child) => Transform.translate(
+      offset: Offset(0, 12 * (1 - value)),
+      child: Opacity(opacity: value, child: child),
+    ),
+    child: Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          gradient: const LinearGradient(
+            colors: [Color(0x1211D8FF), Color(0x12FF5A72)],
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    item.panelistName,
+                    style: const TextStyle(fontWeight: FontWeight.w900),
+                  ),
+                ),
+                StatusBadge(_prettyRecommendation(item.recommendation)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Text(
+                  '${'★' * item.rating.clamp(0, 5).toInt()}${'☆' * (5 - item.rating.clamp(0, 5).toInt())}',
+                  style: const TextStyle(
+                    color: Color(0xFFFFB300),
+                    fontSize: 20,
+                    letterSpacing: 1,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text('${item.rating}/5'),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              item.feedback.isEmpty
+                  ? 'No written comments were provided.'
+                  : item.feedback,
+              style: const TextStyle(color: VistoraColors.muted, height: 1.45),
+            ),
+            if (item.submittedAt != null) ...[
+              const SizedBox(height: 9),
+              Text(
+                'Submitted ${DateFormat.yMMMd().add_jm().format(item.submittedAt!)}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ],
+        ),
+      ),
+    ),
+  );
+
+  static String _prettyRecommendation(String value) => value
+      .replaceAll('_', ' ')
+      .split(' ')
+      .where((part) => part.isNotEmpty)
+      .map((part) => '${part[0].toUpperCase()}${part.substring(1)}')
+      .join(' ');
 }
 
 class _OffersTab extends ConsumerStatefulWidget {
@@ -501,23 +918,23 @@ class _OffersTabState extends ConsumerState<_OffersTab> {
   );
   Future<void> _refresh({bool reset = false}) async {
     if (reset) _page = 1;
-    setState(() => _future = _load());
+    setState(() {
+      _future = _load();
+    });
     await _future;
   }
 
   Future<void> _generate() async {
-    final values = await Future.wait([
-      repository.candidates(perPage: 100),
-      repository.offerTemplates(),
-    ]);
+    final options = await repository.offerOptions(year: DateTime.now().year);
     if (!mounted) return;
     final result = await showModalBottomSheet<_OfferInput>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       builder: (_) => _OfferEditor(
-        candidates: (values[0] as HrPage<RecruitmentCandidate>).items,
-        templates: values[1] as List<LetterTemplate>,
+        candidates: options.candidates,
+        templates: options.templates,
+        payGroups: options.payGroups,
       ),
     );
     if (result == null) return;
@@ -528,6 +945,8 @@ class _OffersTabState extends ConsumerState<_OffersTab> {
         position: result.position,
         startDate: result.startDate,
         ctc: result.ctc,
+        payGroupId: result.payGroupId,
+        components: result.components,
       ),
       'Tenant-branded offer letter generated.',
     );
@@ -784,7 +1203,11 @@ class _OffersTabState extends ConsumerState<_OffersTab> {
               child: FilledButton.tonalIcon(
                 onPressed: _busy ? null : () => _emailOffer(item),
                 icon: const Icon(Icons.mark_email_read_outlined),
-                label: Text(item.status == 'sent' ? 'Resend offer email' : 'Send offer email'),
+                label: Text(
+                  item.status == 'sent'
+                      ? 'Resend offer email'
+                      : 'Send offer email',
+                ),
               ),
             ),
           ],
@@ -815,7 +1238,9 @@ class _AppointmentsTabState extends ConsumerState<_AppointmentsTab> {
   Future<HrPage<EmployeeLetter>> _load() =>
       repository.appointmentLetters(page: _page);
   Future<void> _refresh() async {
-    setState(() => _future = _load());
+    setState(() {
+      _future = _load();
+    });
     await _future;
   }
 
@@ -967,7 +1392,9 @@ class _SettlementsTabState extends ConsumerState<_SettlementsTab> {
   Future<HrPage<FinalSettlementItem>> _load() =>
       repository.settlements(page: _page);
   Future<void> _refresh() async {
-    setState(() => _future = _load());
+    setState(() {
+      _future = _load();
+    });
     await _future;
   }
 
@@ -1281,19 +1708,40 @@ class _InterviewInput {
 }
 
 class _InterviewEditor extends StatefulWidget {
-  const _InterviewEditor({required this.candidate, required this.employees});
+  const _InterviewEditor({
+    required this.candidate,
+    required this.employees,
+    this.initialInterview,
+  });
   final RecruitmentCandidate candidate;
   final List<HrEmployee> employees;
+  final RecruitmentInterview? initialInterview;
   @override
   State<_InterviewEditor> createState() => _InterviewEditorState();
 }
 
 class _InterviewEditorState extends State<_InterviewEditor> {
   DateTime date = DateTime.now().add(const Duration(days: 1));
-  TimeOfDay time = const TimeOfDay(hour: 10, minute: 0);
+  late TimeOfDay time;
   String mode = 'in_person';
   final selected = <int>{};
   final notes = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    final existing = widget.initialInterview;
+    if (existing == null) {
+      time = const TimeOfDay(hour: 10, minute: 0);
+      return;
+    }
+    date = existing.scheduledAt;
+    time = TimeOfDay.fromDateTime(existing.scheduledAt);
+    mode = existing.mode;
+    selected.addAll(existing.panelists.map((item) => item.id));
+    notes.text = existing.notes ?? '';
+  }
+
   @override
   void dispose() {
     notes.dispose();
@@ -1378,7 +1826,11 @@ class _InterviewEditorState extends State<_InterviewEditor> {
                 );
               },
         icon: const Icon(Icons.event_available),
-        label: const Text('Schedule & notify'),
+        label: Text(
+          widget.initialInterview == null
+              ? 'Schedule & notify'
+              : 'Reschedule & notify',
+        ),
       ),
     ],
   );
@@ -1391,23 +1843,32 @@ class _OfferInput {
     this.position,
     this.startDate,
     this.ctc,
+    this.payGroupId,
+    this.components,
   );
   final int candidateId, templateId;
   final String position;
   final DateTime startDate;
   final double ctc;
+  final int? payGroupId;
+  final List<Map<String, dynamic>> components;
 }
 
 class _OfferEditor extends StatefulWidget {
-  const _OfferEditor({required this.candidates, required this.templates});
+  const _OfferEditor({
+    required this.candidates,
+    required this.templates,
+    required this.payGroups,
+  });
   final List<RecruitmentCandidate> candidates;
   final List<LetterTemplate> templates;
+  final List<OfferPayGroupOption> payGroups;
   @override
   State<_OfferEditor> createState() => _OfferEditorState();
 }
 
 class _OfferEditorState extends State<_OfferEditor> {
-  int? candidateId, templateId;
+  int? candidateId, templateId, payGroupId;
   DateTime start = DateTime.now().add(const Duration(days: 14));
   final position = TextEditingController(), ctc = TextEditingController();
   @override
@@ -1423,6 +1884,7 @@ class _OfferEditorState extends State<_OfferEditor> {
     children: [
       DropdownButtonFormField<int>(
         value: candidateId,
+        isExpanded: true,
         decoration: const InputDecoration(labelText: 'Candidate *'),
         items: [
           for (final c in widget.candidates)
@@ -1440,12 +1902,54 @@ class _OfferEditorState extends State<_OfferEditor> {
       ),
       DropdownButtonFormField<int>(
         value: templateId,
+        isExpanded: true,
         decoration: const InputDecoration(labelText: 'Template *'),
         items: [
           for (final t in widget.templates.where((t) => t.status == 'active'))
             DropdownMenuItem(value: t.id, child: Text(t.name)),
         ],
         onChanged: (value) => setState(() => templateId = value),
+      ),
+      DropdownButtonFormField<int>(
+        value: payGroupId,
+        isExpanded: true,
+        decoration: const InputDecoration(
+          labelText: 'Salary pay components / group *',
+        ),
+        items: [
+          const DropdownMenuItem(
+            value: 0,
+            child: Text('Manual CTC (no saved pay group)'),
+          ),
+          for (final group in widget.payGroups)
+            DropdownMenuItem(
+              value: group.id,
+              child: Text(
+                '${group.name} / ${group.displayComponentNames.join(', ')}',
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          /* Legacy employee-structure items intentionally disabled.
+          if (widget.payGroups.isEmpty)
+            const DropdownMenuItem(
+              value: 0,
+              child: Text('Manual CTC (no saved pay group)'),
+            ),
+          for (final structure in widget.payGroups)
+            DropdownMenuItem(
+                '${structure.name} / ${structure.displayComponentNames.join(', ')}',
+              child: Text(
+                '${structure.payGroupName} · ${structure.employeeCode} · ${_money(structure.ctcAnnual)}',
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+        ],
+        onChanged: (value) {
+          */
+        ],
+        onChanged: (value) {
+          setState(() => payGroupId = value);
+        },
       ),
       _required(position, 'Position', onChanged: (_) => setState(() {})),
       TextField(
@@ -1454,6 +1958,15 @@ class _OfferEditorState extends State<_OfferEditor> {
         decoration: const InputDecoration(labelText: 'Annual CTC *'),
         onChanged: (_) => setState(() {}),
       ),
+      if (payGroupId != null &&
+          payGroupId != 0 &&
+          double.tryParse(ctc.text) != null)
+        _OfferBreakupPreview(
+          group: widget.payGroups
+              .where((item) => item.id == payGroupId)
+              .firstOrNull,
+          annualCtc: double.tryParse(ctc.text) ?? 0,
+        ),
       OutlinedButton.icon(
         onPressed: () async {
           final value = await showDatePicker(
@@ -1471,6 +1984,7 @@ class _OfferEditorState extends State<_OfferEditor> {
         onPressed:
             candidateId == null ||
                 templateId == null ||
+                payGroupId == null ||
                 position.text.trim().isEmpty ||
                 double.tryParse(ctc.text) == null
             ? null
@@ -1482,6 +1996,23 @@ class _OfferEditorState extends State<_OfferEditor> {
                   position.text.trim(),
                   start,
                   double.parse(ctc.text),
+                  payGroupId == 0 ? null : payGroupId,
+                  payGroupId == null || payGroupId == 0
+                      ? const []
+                      : (widget.payGroups
+                                    .where((item) => item.id == payGroupId)
+                                    .firstOrNull
+                                    ?.calculate(double.parse(ctc.text))
+                                    .lines ??
+                                const [])
+                            .map(
+                              (line) => {
+                                ...line.component.toJson(),
+                                'monthly': line.monthly,
+                                'annual': line.annual,
+                              },
+                            )
+                            .toList(growable: false),
                 ),
               ),
         icon: const Icon(Icons.auto_awesome),
@@ -1489,6 +2020,264 @@ class _OfferEditorState extends State<_OfferEditor> {
       ),
     ],
   );
+}
+
+class _OfferBreakupPreview extends StatelessWidget {
+  const _OfferBreakupPreview({required this.group, required this.annualCtc});
+
+  final OfferPayGroupOption? group;
+  final double annualCtc;
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = group;
+    if (selected == null) return const SizedBox.shrink();
+    final breakup = selected.calculate(annualCtc);
+
+    Widget section(
+      String title,
+      Iterable<SalaryBreakupLine> source,
+      Color accent,
+      Color background,
+    ) {
+      final lines = source.toList(growable: false);
+      if (lines.isEmpty) return const SizedBox.shrink();
+      final monthly = lines.fold<double>(
+        0,
+        (total, line) => total + line.monthly,
+      );
+      final annual = lines.fold<double>(
+        0,
+        (total, line) => total + line.annual,
+      );
+
+      return Container(
+        margin: const EdgeInsets.only(top: 10),
+        decoration: BoxDecoration(
+          color: background,
+          border: Border.all(color: accent.withAlpha(100)),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+              decoration: BoxDecoration(
+                color: accent.withAlpha(30),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(11),
+                ),
+              ),
+              child: Text(
+                title,
+                style: TextStyle(color: accent, fontWeight: FontWeight.w900),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+              child: Column(
+                children: [
+                  Row(
+                    children: const [
+                      Expanded(
+                        child: Text(
+                          'Component',
+                          style: TextStyle(
+                            color: VistoraColors.muted,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        'Monthly',
+                        style: TextStyle(
+                          color: VistoraColors.muted,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      SizedBox(width: 8),
+                      Text(
+                        'Annual',
+                        style: TextStyle(
+                          color: VistoraColors.muted,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                  for (final line in lines)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              line.component.name,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: VistoraColors.text,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            _money(line.monthly),
+                            style: TextStyle(
+                              color: accent,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            _money(line.annual),
+                            style: TextStyle(
+                              color: accent,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  Divider(color: accent.withAlpha(80), height: 14),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '$title total',
+                          style: const TextStyle(
+                            color: VistoraColors.text,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        _money(monthly),
+                        style: TextStyle(
+                          color: accent,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        _money(annual),
+                        style: TextStyle(
+                          color: accent,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Calculated pay components',
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                color: VistoraColors.orange,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Component',
+                    style: TextStyle(
+                      color: VistoraColors.muted,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                Text(
+                  'Monthly',
+                  style: TextStyle(
+                    color: VistoraColors.muted,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                SizedBox(width: 8),
+                Text(
+                  'Annual',
+                  style: TextStyle(
+                    color: VistoraColors.muted,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+            section(
+              'Earnings',
+              breakup.lines.where(
+                (line) =>
+                    !line.component.isDeduction &&
+                    !line.component.isReimbursement,
+              ),
+              VistoraColors.cyan,
+              const Color(0x1215B8E7),
+            ),
+            section(
+              'Reimbursements',
+              breakup.lines.where((line) => line.component.isReimbursement),
+              const Color(0xFFC4A1FF),
+              const Color(0x12C4A1FF),
+            ),
+            section(
+              'Deductions',
+              breakup.lines.where((line) => line.component.isDeduction),
+              const Color(0xFFFF9F9F),
+              const Color(0x12FF9F9F),
+            ),
+            const Divider(height: 18),
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Monthly net take-home salary',
+                    style: TextStyle(
+                      color: VistoraColors.orange,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                Text(
+                  _money(breakup.netMonthly),
+                  style: const TextStyle(
+                    color: VistoraColors.green,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Text(
+                'Annual net take-home: ${_money(breakup.netMonthly * 12)}',
+                style: const TextStyle(
+                  color: VistoraColors.muted,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _TemplateEditor extends StatefulWidget {
@@ -2128,9 +2917,15 @@ class _ApplicationLinkDialogState extends State<_ApplicationLinkDialog> {
                       }
                       setState(() => _sending = true);
                       try {
-                        final delivery = await widget.onEmail(_email.text.trim());
+                        final delivery = await widget.onEmail(
+                          _email.text.trim(),
+                        );
                         if (context.mounted) {
-                          _snack(context, delivery.message, success: delivery.sent);
+                          _snack(
+                            context,
+                            delivery.message,
+                            success: delivery.sent,
+                          );
                         }
                       } finally {
                         if (mounted) setState(() => _sending = false);

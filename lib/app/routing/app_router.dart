@@ -5,6 +5,7 @@ import 'package:vistora_mobile/core/widgets/network_banner.dart';
 import 'package:vistora_mobile/app/routing/app_shell.dart';
 import 'package:vistora_mobile/features/attendance/presentation/attendance_screen.dart';
 import 'package:vistora_mobile/features/attendance/presentation/team_attendance_screen.dart';
+import 'package:vistora_mobile/features/billing/presentation/billing_screen.dart';
 import 'package:vistora_mobile/features/auth/presentation/auth_controller.dart';
 import 'package:vistora_mobile/features/auth/presentation/forgot_password_screen.dart';
 import 'package:vistora_mobile/features/auth/presentation/login_screen.dart';
@@ -20,6 +21,7 @@ import 'package:vistora_mobile/features/mr/presentation/mr_screen.dart';
 import 'package:vistora_mobile/features/payslips/presentation/payslips_screen.dart';
 import 'package:vistora_mobile/features/payroll/presentation/payroll_admin_screen.dart';
 import 'package:vistora_mobile/features/platform_admin/presentation/platform_admin_screen.dart';
+import 'package:vistora_mobile/features/performance/presentation/performance_screen.dart';
 import 'package:vistora_mobile/features/profile/presentation/profile_screen.dart';
 import 'package:vistora_mobile/features/salary/presentation/salary_management_screen.dart';
 import 'package:vistora_mobile/features/tenant_settings/presentation/tenant_settings_screen.dart';
@@ -124,6 +126,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           !const {'admin', 'hr'}.contains(auth.session?.user.normalizedRole)) {
         return '/dashboard';
       }
+      if (auth.status == AuthStatus.authenticated &&
+          path == '/billing' &&
+          !const {'admin', 'hr'}.contains(auth.session?.user.normalizedRole)) {
+        return '/dashboard';
+      }
       return null;
     },
     routes: [
@@ -206,6 +213,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             path: '/tax-invoices',
             builder: (context, state) => const TaxInvoicesScreen(),
           ),
+          GoRoute(
+            path: '/billing',
+            builder: (context, state) => const TenantBillingScreen(),
+          ),
           GoRoute(path: '/mr', builder: (context, state) => const MrScreen()),
           GoRoute(
             path: '/finance-hub',
@@ -226,6 +237,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 const PlatformAdminScreen(initialIndex: 2),
           ),
           GoRoute(
+            path: '/platform/bills',
+            builder: (context, state) => const PlatformBillsScreen(),
+          ),
+          GoRoute(
             path: '/platform/onboarding',
             builder: (context, state) =>
                 const PlatformAdminScreen(initialIndex: 3),
@@ -239,6 +254,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             path: '/projects',
             builder: (context, state) =>
                 const EmployeeWorkScreen(initialIndex: 0),
+          ),
+          GoRoute(
+            path: '/performance',
+            builder: (context, state) => const PerformanceScreen(),
           ),
           GoRoute(
             path: '/interviews',

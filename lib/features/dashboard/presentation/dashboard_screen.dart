@@ -2,15 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:vistora_mobile/app/providers.dart';
 import 'package:vistora_mobile/app/theme/app_theme.dart';
+import 'package:vistora_mobile/core/api/api_parsing.dart';
 import 'package:vistora_mobile/core/widgets/responsive_center.dart';
+import 'package:vistora_mobile/core/widgets/status_badge.dart';
 import 'package:vistora_mobile/features/attendance/presentation/attendance_providers.dart';
 import 'package:vistora_mobile/features/auth/domain/auth_session.dart';
 import 'package:vistora_mobile/features/auth/presentation/auth_controller.dart';
+import 'package:vistora_mobile/features/billing/data/billing_repository.dart';
+import 'package:vistora_mobile/features/billing/domain/billing_models.dart';
 import 'package:vistora_mobile/features/holidays/presentation/holiday_providers.dart';
 import 'package:vistora_mobile/features/leave/presentation/leave_providers.dart';
 import 'package:vistora_mobile/features/mr/domain/mr_models.dart';
 import 'package:vistora_mobile/features/mr/presentation/mr_providers.dart';
+import 'package:vistora_mobile/features/work/domain/employee_work_models.dart';
+import 'package:vistora_mobile/features/work/presentation/employee_work_providers.dart';
 
 final dashboardPendingLeavesProvider = FutureProvider<int>((ref) async {
   final session = ref.watch(authControllerProvider).session;
@@ -36,6 +43,128 @@ final dashboardUpcomingMrProvider = FutureProvider.autoDispose
           .where((item) => !item.visitDate.isAfter(limit))
           .toList();
     });
+
+final dashboardBillingProvider = FutureProvider.autoDispose<BillingPage?>((
+  ref,
+) async {
+  // Prevent a previous tenant's billing summary from surviving a logout and
+  // appearing briefly after another account signs in.
+  ref.watch(authControllerProvider.select((state) => state.session?.user.id));
+  try {
+    return await BillingRepository(
+      ref.watch(apiClientProvider),
+    ).tenantBills(status: 'due');
+  } catch (_) {
+    // Older API deployments simply omit this new additive panel.
+    return null;
+  }
+});
+
+bool _isActiveInterviewNotification(Map<String, dynamic> item) {
+  if (item['status']?.toString().toLowerCase() == 'read') return false;
+
+  final payload = asMap(item['payload_json']);
+  final rawDate =
+      (payload['scheduled_at_local'] ??
+              payload['scheduled_at'] ??
+              item['scheduled_at'])
+          ?.toString()
+          .trim();
+  if (rawDate == null || rawDate.length < 10) return true;
+
+  final now = DateTime.now();
+  final scheduledDay = DateTime.tryParse(rawDate.substring(0, 10));
+  if (scheduledDay == null) return true;
+  final today = DateTime(now.year, now.month, now.day);
+  return !scheduledDay.isBefore(today);
+}
+
+final dashboardInterviewNotificationsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+      final response = await ref
+          .watch(apiClientProvider)
+          .get('/notifications', queryParameters: {'perPage': 10});
+      final data = asMap(response['data']);
+      return asList(asMap(data['items'])['data'])
+          .map((item) => asMap(item))
+          .where(
+            (item) => const {
+              'INTERVIEW_ASSIGNED',
+              'INTERVIEW_RESCHEDULED',
+            }.contains(item['template_code']),
+          )
+          .where(_isActiveInterviewNotification)
+          .toList();
+    });
+
+Future<void> _openInterviewNotification(
+  BuildContext context,
+  WidgetRef ref,
+  Map<String, dynamic> item,
+) async {
+  final id = asInt(item['id']);
+  if (id != 0) {
+    try {
+      await ref.read(apiClientProvider).post('/notifications/$id/read');
+    } catch (_) {
+      // Navigation should remain available even if marking a notification
+      // read fails temporarily.
+    }
+  }
+  ref.invalidate(dashboardInterviewNotificationsProvider);
+  if (context.mounted) context.go('/interviews');
+}
+
+Future<void> refreshDashboardData(WidgetRef ref, AuthSession session) async {
+  final role = session.user.normalizedRole;
+  final companyManager = const {'admin', 'hr'}.contains(role);
+  final managesLeave = companyManager || role == 'supervisor';
+  final futures = <Future<void>>[];
+
+  ref.invalidate(upcomingHolidaysProvider);
+  futures.add(ref.read(upcomingHolidaysProvider.future).then((_) {}));
+
+  if (managesLeave) {
+    ref.invalidate(dashboardPendingLeavesProvider);
+    futures.add(ref.read(dashboardPendingLeavesProvider.future).then((_) {}));
+  }
+  if (companyManager) {
+    ref.invalidate(dashboardBillingProvider);
+    futures.add(ref.read(dashboardBillingProvider.future).then((_) {}));
+  }
+  if (session.employeeId != null && !companyManager) {
+    ref.invalidate(todayAttendanceProvider);
+    ref.invalidate(leaveSummaryProvider);
+    futures.add(ref.read(todayAttendanceProvider.future).then((_) {}));
+    futures.add(ref.read(leaveSummaryProvider.future).then((_) {}));
+  }
+  if (const {'employee', 'supervisor'}.contains(role)) {
+    if (session.employeeId != null && session.features.projects) {
+      ref.invalidate(dashboardAssignedProjectsProvider(session.employeeId!));
+      futures.add(
+        ref
+            .read(dashboardAssignedProjectsProvider(session.employeeId!).future)
+            .then((_) {}),
+      );
+    }
+    ref.invalidate(dashboardInterviewNotificationsProvider);
+    futures.add(
+      ref.read(dashboardInterviewNotificationsProvider.future).then((_) {}),
+    );
+  }
+  if (session.features.mr &&
+      session.employeeId != null &&
+      const {'employee', 'supervisor'}.contains(role)) {
+    ref.invalidate(dashboardUpcomingMrProvider(session.employeeId!));
+    futures.add(
+      ref
+          .read(dashboardUpcomingMrProvider(session.employeeId!).future)
+          .then((_) {}),
+    );
+  }
+
+  await Future.wait(futures);
+}
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -68,6 +197,17 @@ class DashboardScreen extends ConsumerWidget {
         session.features.mr && const {'employee', 'supervisor'}.contains(role)
         ? ref.watch(dashboardUpcomingMrProvider(session.employeeId!))
         : null;
+    final billing = companyManager ? ref.watch(dashboardBillingProvider) : null;
+    final interviewNotifications =
+        const {'employee', 'supervisor'}.contains(role)
+        ? ref.watch(dashboardInterviewNotificationsProvider)
+        : null;
+    final assignedProjects =
+        session.employeeId != null &&
+            session.features.projects &&
+            const {'employee', 'supervisor'}.contains(role)
+        ? ref.watch(dashboardAssignedProjectsProvider(session.employeeId!))
+        : null;
     return Scaffold(
       appBar: AppBar(
         title: Column(
@@ -86,15 +226,7 @@ class DashboardScreen extends ConsumerWidget {
         actions: [
           IconButton(
             tooltip: 'Refresh dashboard',
-            onPressed: () {
-              ref.invalidate(todayAttendanceProvider);
-              ref.invalidate(leaveSummaryProvider);
-              if (session.employeeId != null) {
-                ref.invalidate(
-                  dashboardUpcomingMrProvider(session.employeeId!),
-                );
-              }
-            },
+            onPressed: () => refreshDashboardData(ref, session),
             icon: const Icon(Icons.refresh),
           ),
           IconButton(
@@ -111,24 +243,49 @@ class DashboardScreen extends ConsumerWidget {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: () async {
-          ref.invalidate(todayAttendanceProvider);
-          ref.invalidate(leaveSummaryProvider);
-          if (session.employeeId != null) {
-            ref.invalidate(dashboardUpcomingMrProvider(session.employeeId!));
-          }
-          if (session.employeeId != null) {
-            await Future.wait([
-              ref.read(todayAttendanceProvider.future),
-              ref.read(leaveSummaryProvider.future),
-            ]);
-          }
-        },
+        onRefresh: () => refreshDashboardData(ref, session),
         child: ResponsiveCenter(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _Hero(session: session),
+              if (interviewNotifications != null)
+                interviewNotifications.when(
+                  loading: () => const SizedBox.shrink(),
+                  error: (_, _) => const SizedBox.shrink(),
+                  data: (items) => items.isEmpty
+                      ? const SizedBox.shrink()
+                      : _InterviewNotificationCard(
+                          items: items,
+                          onOpen: (item) =>
+                              _openInterviewNotification(context, ref, item),
+                        ),
+                ),
+              if (assignedProjects != null) ...[
+                const SizedBox(height: 18),
+                assignedProjects.when(
+                  loading: () => const SizedBox.shrink(),
+                  error: (_, _) => const SizedBox.shrink(),
+                  data: (items) => _DashboardProjectsCard(
+                    projects: items,
+                    employeeId: session.employeeId,
+                    onOpen: () => context.go('/projects'),
+                  ),
+                ),
+              ],
+              if (companyManager && billing != null) ...[
+                const SizedBox(height: 18),
+                billing.when(
+                  data: (page) => page == null || page.items.isEmpty
+                      ? const SizedBox.shrink()
+                      : _BillingSummaryCard(
+                          bills: page.items,
+                          onTap: () => context.go('/billing'),
+                        ),
+                  loading: () => const SizedBox.shrink(),
+                  error: (_, _) => const SizedBox.shrink(),
+                ),
+              ],
               if (session.employeeId != null && !companyManager) ...[
                 const SizedBox(height: 18),
                 LayoutBuilder(
@@ -387,6 +544,12 @@ class DashboardScreen extends ConsumerWidget {
           '/platform/payments',
         ),
         const _Module(
+          'Client Bills',
+          Icons.request_quote_outlined,
+          VistoraColors.amber,
+          '/platform/bills',
+        ),
+        const _Module(
           'Onboarding',
           Icons.how_to_reg_outlined,
           VistoraColors.pink,
@@ -420,6 +583,12 @@ class DashboardScreen extends ConsumerWidget {
         VistoraColors.amber,
         '/payslips',
       ),
+      const _Module(
+        'Performance',
+        Icons.emoji_events_outlined,
+        VistoraColors.pink,
+        '/performance',
+      ),
       if (const {'admin', 'hr'}.contains(session.user.normalizedRole))
         const _Module(
           'Payroll Admin',
@@ -433,6 +602,13 @@ class DashboardScreen extends ConsumerWidget {
           Icons.receipt_long_outlined,
           VistoraColors.cyan,
           '/tax-invoices',
+        ),
+      if (const {'admin', 'hr'}.contains(session.user.normalizedRole))
+        const _Module(
+          'Client Billing',
+          Icons.request_quote_outlined,
+          VistoraColors.amber,
+          '/billing',
         ),
       if (const {'admin', 'hr'}.contains(session.user.normalizedRole))
         const _Module(
@@ -683,6 +859,126 @@ Future<void> _showUpcomingMrVisit(
   ),
 );
 
+class _DashboardProjectsCard extends StatelessWidget {
+  const _DashboardProjectsCard({
+    required this.projects,
+    required this.employeeId,
+    required this.onOpen,
+  });
+
+  final List<EmployeeProject> projects;
+  final int? employeeId;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final visible = projects
+        .where((project) {
+          final assignment = project.assignmentFor(employeeId);
+          return assignment != null && project.status != 'cancelled';
+        })
+        .take(3)
+        .toList();
+    if (visible.isEmpty) return const SizedBox.shrink();
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: Ink(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0x1824D6A3), Color(0x1511D8FF), Color(0x14FF5A72)],
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.auto_awesome, color: VistoraColors.cyan),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'My assigned projects',
+                      style: TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                  ),
+                  TextButton(onPressed: onOpen, child: const Text('View all')),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Deadlines and recent progress at a glance.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 10),
+              ...visible.asMap().entries.map((entry) {
+                final project = entry.value;
+                final assignment = project.assignmentFor(employeeId)!;
+                return TweenAnimationBuilder<double>(
+                  duration: Duration(milliseconds: 260 + entry.key * 70),
+                  tween: Tween(begin: 0, end: 1),
+                  builder: (context, value, child) => Opacity(
+                    opacity: value,
+                    child: Transform.translate(
+                      offset: Offset(0, 8 * (1 - value)),
+                      child: child,
+                    ),
+                  ),
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: .12),
+                      borderRadius: BorderRadius.circular(15),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: .08),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.work_outline,
+                          color: VistoraColors.orange,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                project.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                assignment.deadline == null
+                                    ? 'No deadline set'
+                                    : 'Deadline ${DateFormat.MMMd().format(assignment.deadline!)}',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
+                          ),
+                        ),
+                        StatusBadge(project.status),
+                      ],
+                    ),
+                  ),
+                );
+              }),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _MrDashboardDetail extends StatelessWidget {
   const _MrDashboardDetail({
     required this.icon,
@@ -713,6 +1009,78 @@ class _MrDashboardDetail extends StatelessWidget {
           ),
         ),
       ],
+    ),
+  );
+}
+
+class _InterviewNotificationCard extends StatelessWidget {
+  const _InterviewNotificationCard({required this.items, required this.onOpen});
+
+  final List<Map<String, dynamic>> items;
+  final Future<void> Function(Map<String, dynamic> item) onOpen;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    child: Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        gradient: const LinearGradient(
+          colors: [Color(0x332D1B69), Color(0x2230A7C9)],
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.record_voice_over_outlined, color: VistoraColors.cyan),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Interview notifications',
+                  style: TextStyle(fontWeight: FontWeight.w900),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          for (final item in items.take(3))
+            Builder(
+              builder: (context) {
+                final payload = asMap(item['payload_json']);
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  onTap: () {
+                    onOpen(item);
+                  },
+                  leading: const CircleAvatar(
+                    child: Icon(Icons.event_available_outlined),
+                  ),
+                  title: Text(
+                    payload['title']?.toString() ?? 'Interview update',
+                  ),
+                  subtitle: Text(
+                    payload['message']?.toString() ??
+                        'Open Interviews to view the schedule.',
+                  ),
+                );
+              },
+            ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: items.isEmpty
+                  ? null
+                  : () {
+                      onOpen(items.first);
+                    },
+              icon: const Icon(Icons.arrow_forward),
+              label: const Text('Open interviews'),
+            ),
+          ),
+        ],
+      ),
     ),
   );
 }
@@ -748,6 +1116,60 @@ class _Hero extends StatelessWidget {
       ],
     ),
   );
+}
+
+class _BillingSummaryCard extends StatelessWidget {
+  const _BillingSummaryCard({required this.bills, required this.onTap});
+
+  final List<PlatformBill> bills;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final total = bills.fold<double>(0, (sum, bill) => sum + bill.totalAmount);
+    final overdue = bills.where((bill) => bill.overdue).length;
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(18),
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFF271A3C), Color(0xFF10283C)],
+            ),
+          ),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.receipt_long_outlined,
+                color: VistoraColors.amber,
+                size: 30,
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Outstanding billing',
+                      style: TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${bills.length} bill${bills.length == 1 ? '' : 's'} · ₹${total.toStringAsFixed(2)}${overdue > 0 ? ' · $overdue overdue' : ''}',
+                      style: const TextStyle(color: VistoraColors.muted),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.arrow_forward_ios, size: 16),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _LiveMetric extends StatelessWidget {

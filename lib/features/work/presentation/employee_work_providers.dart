@@ -11,6 +11,17 @@ final employeeProjectsProvider = FutureProvider<List<EmployeeProject>>(
   (ref) => ref.watch(employeeWorkRepositoryProvider).projects(),
 );
 
+final dashboardAssignedProjectsProvider = FutureProvider.autoDispose
+    .family<List<EmployeeProject>, int>((ref, employeeId) async {
+      // The API applies the tenant and reporting-tree scope. The employee id
+      // only scopes this provider's cache to the signed-in account.
+      return ref.watch(employeeWorkRepositoryProvider).projects();
+    });
+
+final projectManagementProvider = FutureProvider<ProjectManagementPage>(
+  (ref) => ref.watch(employeeWorkRepositoryProvider).projectManagement(),
+);
+
 final interviewTasksProvider = FutureProvider<List<InterviewTask>>(
   (ref) => ref.watch(employeeWorkRepositoryProvider).interviews(),
 );

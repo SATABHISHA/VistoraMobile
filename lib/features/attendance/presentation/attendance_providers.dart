@@ -13,9 +13,10 @@ final locationServiceProvider = Provider<LocationService>(
   (ref) => const LocationService(),
 );
 
-final todayAttendanceProvider = FutureProvider<TodayAttendance>(
-  (ref) => ref.watch(attendanceRepositoryProvider).today(),
-);
+final todayAttendanceProvider = FutureProvider<TodayAttendance>((ref) {
+  ref.watch(authControllerProvider.select((state) => state.session?.user.id));
+  return ref.watch(attendanceRepositoryProvider).today();
+});
 
 class AttendanceMonth {
   const AttendanceMonth(this.year, this.month);
