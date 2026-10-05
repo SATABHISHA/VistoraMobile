@@ -6,13 +6,28 @@ class BillingRepository {
   const BillingRepository(this._api);
   final ApiClient _api;
 
-  Future<BillingPage> tenantBills({int page = 1, String? status}) async =>
-      _page(
-        await _api.get(
-          '/billing/bills',
-          queryParameters: {'page': page, 'perPage': 20, 'status': ?status},
-        ),
-      );
+  Future<BillingPage> tenantBills({
+    int page = 1,
+    int perPage = 20,
+    String? status,
+    int? year,
+    int? month,
+    DateTime? dateFrom,
+    DateTime? dateTo,
+  }) async => _page(
+    await _api.get(
+      '/billing/bills',
+      queryParameters: {
+        'page': page,
+        'perPage': perPage,
+        'status': ?status,
+        'year': ?year,
+        'month': ?month,
+        'date_from': ?dateFrom?.toIso8601String().substring(0, 10),
+        'date_to': ?dateTo?.toIso8601String().substring(0, 10),
+      },
+    ),
+  );
 
   Future<BillingPage> superadminBills({
     int page = 1,

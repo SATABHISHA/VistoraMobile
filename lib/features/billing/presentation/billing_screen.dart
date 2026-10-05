@@ -40,6 +40,13 @@ class _TenantBillingScreenState extends ConsumerState<TenantBillingScreen>
   late Future<BillingPage> _future;
   int? _busyId;
   bool _paymentReturnPending = false;
+  String _status = 'due';
+  int _page = 1;
+  int _perPage = 10;
+  int? _year;
+  int? _month;
+  DateTime? _dateFrom;
+  DateTime? _dateTo;
 
   BillingRepository get repository => ref.read(billingRepositoryProvider);
 
@@ -47,7 +54,7 @@ class _TenantBillingScreenState extends ConsumerState<TenantBillingScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _future = repository.tenantBills();
+    _future = _loadBills();
   }
 
   @override
@@ -70,8 +77,83 @@ class _TenantBillingScreenState extends ConsumerState<TenantBillingScreen>
   }
 
   Future<void> _refresh() async {
-    setState(() => _future = repository.tenantBills());
+    setState(() => _future = _loadBills());
     await _future;
+  }
+
+  Future<BillingPage> _loadBills() => repository.tenantBills(
+    page: _page,
+    perPage: _perPage,
+    status: _status,
+    year: _year,
+    month: _month,
+    dateFrom: _dateFrom,
+    dateTo: _dateTo,
+  );
+
+  Future<void> _applyFilters({
+    String? status,
+    int? year,
+    int? month,
+    DateTime? dateFrom,
+    DateTime? dateTo,
+    bool clearYear = false,
+    bool clearMonth = false,
+    bool clearFrom = false,
+    bool clearTo = false,
+  }) async {
+    setState(() {
+      _page = 1;
+      if (status != null) _status = status;
+      if (clearYear) _year = null;
+      if (year != null) _year = year;
+      if (clearMonth) _month = null;
+      if (month != null) _month = month;
+      if (clearFrom) _dateFrom = null;
+      if (dateFrom != null) _dateFrom = dateFrom;
+      if (clearTo) _dateTo = null;
+      if (dateTo != null) _dateTo = dateTo;
+      _future = _loadBills();
+    });
+    await _future;
+  }
+
+  Future<void> _goToPage(int page) async {
+    if (page < 1) return;
+    setState(() {
+      _page = page;
+      _future = _loadBills();
+    });
+    await _future;
+  }
+
+  Future<void> _changeRowsPerPage(int value) async {
+    setState(() {
+      _perPage = value;
+      _page = 1;
+      _future = _loadBills();
+    });
+    await _future;
+  }
+
+  Future<void> _pickFilterDate({required bool from}) async {
+    final selected = await showDatePicker(
+      context: context,
+      initialDate: from
+          ? (_dateFrom ?? DateTime.now())
+          : (_dateTo ?? DateTime.now()),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2200),
+    );
+    if (!mounted || selected == null) return;
+    if (from) {
+      await _applyFilters(
+        dateFrom: selected,
+        clearTo: _dateTo != null && _dateTo!.isBefore(selected),
+      );
+    } else {
+      await _applyFilters(dateTo: selected);
+    }
   }
 
   Future<void> _pay(PlatformBill bill) async {
@@ -167,6 +249,36 @@ class _TenantBillingScreenState extends ConsumerState<TenantBillingScreen>
                   snapshot.data?.items.where((bill) => bill.overdue).length ??
                   0,
             ),
+            if (snapshot.data?.items.any((bill) => bill.overdue) ?? false)
+              _OverdueBanner(
+                count: snapshot.data!.items
+                    .where((bill) => bill.overdue)
+                    .length,
+              ),
+            const SizedBox(height: 16),
+            _BillingFilterCard(
+              status: _status,
+              year: _year,
+              month: _month,
+              dateFrom: _dateFrom,
+              dateTo: _dateTo,
+              onStatusChanged: (value) => _applyFilters(status: value),
+              onYearChanged: (value) =>
+                  _applyFilters(year: value, clearYear: value == null),
+              onMonthChanged: (value) =>
+                  _applyFilters(month: value, clearMonth: value == null),
+              onPickFrom: () => _pickFilterDate(from: true),
+              onPickTo: () => _pickFilterDate(from: false),
+              perPage: _perPage,
+              onPerPageChanged: _changeRowsPerPage,
+              onClear: () => _applyFilters(
+                status: 'due',
+                clearYear: true,
+                clearMonth: true,
+                clearFrom: true,
+                clearTo: true,
+              ),
+            ),
             const SizedBox(height: 16),
             if (snapshot.connectionState != ConnectionState.done)
               const _LoadingCard()
@@ -187,6 +299,18 @@ class _TenantBillingScreenState extends ConsumerState<TenantBillingScreen>
                   onBillDocument: () => _billDocument(bill),
                   onDownloadBill: () => _billDocument(bill, download: true),
                 ),
+              ),
+            if (snapshot.hasData && snapshot.data!.total > 0)
+              _BillingPager(
+                page: snapshot.data!.page,
+                lastPage: snapshot.data!.lastPage,
+                total: snapshot.data!.total,
+                onPrevious: snapshot.data!.page > 1
+                    ? () => _goToPage(snapshot.data!.page - 1)
+                    : null,
+                onNext: snapshot.data!.page < snapshot.data!.lastPage
+                    ? () => _goToPage(snapshot.data!.page + 1)
+                    : null,
               ),
           ],
         ),
@@ -737,6 +861,8 @@ class _BillEditorSheetState extends State<_BillEditorSheet> {
   var sendEmail = true;
   var issueDate = DateTime.now();
   var dueDate = DateTime.now().add(const Duration(days: 7));
+  DateTime? periodStart;
+  DateTime? periodEnd;
   var busy = false;
 
   @override
@@ -748,7 +874,44 @@ class _BillEditorSheetState extends State<_BillEditorSheet> {
     cgstRate.text = widget.settings.cgstPercent.toString();
     sgstRate.text = widget.settings.sgstPercent.toString();
     igstRate.text = widget.settings.igstPercent.toString();
+    _syncPeriodDates();
     _loadRecipients();
+  }
+
+  void _syncPeriodDates() {
+    if (periodType == 'one-time') {
+      periodStart = null;
+      periodEnd = null;
+      return;
+    }
+    if (periodType == 'custom') {
+      periodStart ??= issueDate;
+      periodEnd ??= issueDate;
+      return;
+    }
+    final year = issueDate.year;
+    final month = issueDate.month;
+    late int firstMonth;
+    late int monthCount;
+    switch (periodType) {
+      case 'quarterly':
+        firstMonth = ((month - 1) ~/ 3) * 3 + 1;
+        monthCount = 3;
+        break;
+      case 'half-yearly':
+        firstMonth = month <= 6 ? 1 : 7;
+        monthCount = 6;
+        break;
+      case 'yearly':
+        firstMonth = 1;
+        monthCount = 12;
+        break;
+      default:
+        firstMonth = month;
+        monthCount = 1;
+    }
+    periodStart = DateTime(year, firstMonth, 1);
+    periodEnd = DateTime(year, firstMonth + monthCount, 0);
   }
 
   Future<void> _loadRecipients() async {
@@ -785,8 +948,36 @@ class _BillEditorSheetState extends State<_BillEditorSheet> {
       lastDate: DateTime(2200),
       initialDate: due ? dueDate : issueDate,
     );
-    if (picked != null)
-      setState(() => due ? dueDate = picked : issueDate = picked);
+    if (picked != null) {
+      setState(() {
+        if (due) {
+          dueDate = picked;
+        } else {
+          issueDate = picked;
+          if (periodType != 'custom') _syncPeriodDates();
+        }
+      });
+    }
+  }
+
+  Future<void> _pickServiceDate(bool start) async {
+    final picked = await showDatePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2200),
+      initialDate: start
+          ? (periodStart ?? issueDate)
+          : (periodEnd ?? issueDate),
+    );
+    if (picked != null) {
+      setState(() {
+        if (start) {
+          periodStart = picked;
+        } else {
+          periodEnd = picked;
+        }
+      });
+    }
   }
 
   void _submit() {
@@ -798,6 +989,10 @@ class _BillEditorSheetState extends State<_BillEditorSheet> {
     if (value == null ||
         value <= 0 ||
         dueDate.isBefore(issueDate) ||
+        (periodType == 'custom' &&
+            (periodStart == null ||
+                periodEnd == null ||
+                periodEnd!.isBefore(periodStart!))) ||
         (gstEnabled &&
             ((gstType == 'cgst_sgst' && (cgst <= 0 || sgst <= 0)) ||
                 (gstType == 'igst' && igst <= 0)))) {
@@ -814,6 +1009,8 @@ class _BillEditorSheetState extends State<_BillEditorSheet> {
         periodType: periodType,
         issueDate: issueDate,
         dueDate: dueDate,
+        periodStart: periodStart,
+        periodEnd: periodEnd,
         amount: value,
         gstEnabled: gstEnabled,
         gstType: gstType,
@@ -906,15 +1103,12 @@ class _BillEditorSheetState extends State<_BillEditorSheet> {
                 child: Text('Half-yearly'),
               ),
               DropdownMenuItem(value: 'yearly', child: Text('Yearly')),
+              DropdownMenuItem(value: 'custom', child: Text('Custom dates')),
             ],
-            onChanged: (value) =>
-                setState(() => periodType = value ?? periodType),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: amount,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(labelText: 'Amount (INR)'),
+            onChanged: (value) => setState(() {
+              periodType = value ?? periodType;
+              _syncPeriodDates();
+            }),
           ),
           const SizedBox(height: 12),
           Row(
@@ -935,6 +1129,45 @@ class _BillEditorSheetState extends State<_BillEditorSheet> {
                 ),
               ),
             ],
+          ),
+          if (periodType != 'one-time') ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _DateButton(
+                    label: 'Service period from',
+                    value: periodStart ?? issueDate,
+                    onTap: periodType == 'custom'
+                        ? () => _pickServiceDate(true)
+                        : null,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _DateButton(
+                    label: 'Service period to',
+                    value: periodEnd ?? issueDate,
+                    onTap: periodType == 'custom'
+                        ? () => _pickServiceDate(false)
+                        : null,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              periodType == 'custom'
+                  ? 'Choose the service dates manually.'
+                  : 'Automatically calculated from the issue date. Choose Custom dates to override it.',
+              style: const TextStyle(color: VistoraColors.muted, fontSize: 12),
+            ),
+          ],
+          const SizedBox(height: 12),
+          TextField(
+            controller: amount,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(labelText: 'Amount (INR)'),
           ),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
@@ -1215,6 +1448,284 @@ class _GatewayEditorSheetState extends State<_GatewayEditorSheet> {
   );
 }
 
+class _OverdueBanner extends StatefulWidget {
+  const _OverdueBanner({required this.count});
+
+  final int count;
+
+  @override
+  State<_OverdueBanner> createState() => _OverdueBannerState();
+}
+
+class _OverdueBannerState extends State<_OverdueBanner>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1700),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: _controller,
+    builder: (context, child) {
+      final pulse = _controller.value;
+      return Container(
+        margin: const EdgeInsets.only(top: 14),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF7F1D1D), Color(0xFF3B1425)],
+          ),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: Color.lerp(
+              const Color(0xFFFF8A8A),
+              const Color(0xFFEF4444),
+              pulse,
+            )!,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0x66EF4444).withValues(alpha: .35 * pulse),
+              blurRadius: 20 + pulse * 12,
+              spreadRadius: pulse * 2,
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.warning_amber_rounded,
+              color: Color.lerp(const Color(0xFFFECACA), Colors.white, pulse),
+              size: 30,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                '${widget.count} payment${widget.count == 1 ? '' : 's'} overdue - please arrange payment.',
+                style: const TextStyle(
+                  color: Color(0xFFFFE4E6),
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    },
+  );
+}
+
+class _BillingFilterCard extends StatelessWidget {
+  const _BillingFilterCard({
+    required this.status,
+    required this.year,
+    required this.month,
+    required this.dateFrom,
+    required this.dateTo,
+    required this.onStatusChanged,
+    required this.onYearChanged,
+    required this.onMonthChanged,
+    required this.onPickFrom,
+    required this.onPickTo,
+    required this.perPage,
+    required this.onPerPageChanged,
+    required this.onClear,
+  });
+
+  final String status;
+  final int? year;
+  final int? month;
+  final DateTime? dateFrom;
+  final DateTime? dateTo;
+  final ValueChanged<String> onStatusChanged;
+  final ValueChanged<int?> onYearChanged;
+  final ValueChanged<int?> onMonthChanged;
+  final VoidCallback onPickFrom;
+  final VoidCallback onPickTo;
+  final int perPage;
+  final ValueChanged<int> onPerPageChanged;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final years = List<int>.generate(7, (index) => now.year - index);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Filter billing',
+              style: TextStyle(fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 10),
+            DropdownButtonFormField<String>(
+              value: status,
+              decoration: const InputDecoration(labelText: 'Bill status'),
+              items: const [
+                DropdownMenuItem(value: 'due', child: Text('Due / unpaid')),
+                DropdownMenuItem(value: 'all', child: Text('All bills')),
+                DropdownMenuItem(value: 'paid', child: Text('Paid')),
+              ],
+              onChanged: (value) {
+                if (value != null) onStatusChanged(value);
+              },
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<int?>(
+                    value: year,
+                    decoration: const InputDecoration(labelText: 'Year'),
+                    items: [
+                      const DropdownMenuItem<int?>(
+                        value: null,
+                        child: Text('All years'),
+                      ),
+                      ...years.map(
+                        (item) => DropdownMenuItem<int?>(
+                          value: item,
+                          child: Text('$item'),
+                        ),
+                      ),
+                    ],
+                    onChanged: onYearChanged,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: DropdownButtonFormField<int?>(
+                    value: month,
+                    decoration: const InputDecoration(labelText: 'Month'),
+                    items: [
+                      const DropdownMenuItem<int?>(
+                        value: null,
+                        child: Text('All months'),
+                      ),
+                      ...List.generate(
+                        12,
+                        (index) => DropdownMenuItem<int?>(
+                          value: index + 1,
+                          child: Text(
+                            DateFormat.MMMM().format(DateTime(2020, index + 1)),
+                          ),
+                        ),
+                      ),
+                    ],
+                    onChanged: onMonthChanged,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            DropdownButtonFormField<int>(
+              value: perPage,
+              decoration: const InputDecoration(labelText: 'Rows per page'),
+              items: const [
+                DropdownMenuItem(value: 5, child: Text('5 rows')),
+                DropdownMenuItem(value: 10, child: Text('10 rows')),
+                DropdownMenuItem(value: 20, child: Text('20 rows')),
+                DropdownMenuItem(value: 50, child: Text('50 rows')),
+              ],
+              onChanged: (value) {
+                if (value != null) onPerPageChanged(value);
+              },
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onPickFrom,
+                    icon: const Icon(Icons.event_outlined),
+                    label: Text(
+                      dateFrom == null ? 'From date' : _date.format(dateFrom!),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onPickTo,
+                    icon: const Icon(Icons.event_outlined),
+                    label: Text(
+                      dateTo == null ? 'To date' : _date.format(dateTo!),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: onClear,
+                icon: const Icon(Icons.restart_alt),
+                label: const Text('Reset to due bills'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BillingPager extends StatelessWidget {
+  const _BillingPager({
+    required this.page,
+    required this.lastPage,
+    required this.total,
+    required this.onPrevious,
+    required this.onNext,
+  });
+
+  final int page;
+  final int lastPage;
+  final int total;
+  final VoidCallback? onPrevious;
+  final VoidCallback? onNext;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              'Page $page of $lastPage • $total bill${total == 1 ? '' : 's'}',
+              style: const TextStyle(
+                color: VistoraColors.muted,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Previous page',
+            onPressed: onPrevious,
+            icon: const Icon(Icons.chevron_left),
+          ),
+          IconButton(
+            tooltip: 'Next page',
+            onPressed: onNext,
+            icon: const Icon(Icons.chevron_right),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
 class _BillingHero extends StatelessWidget {
   const _BillingHero({required this.overdue, this.superadmin = false});
   final int overdue;
@@ -1328,7 +1839,7 @@ class _DateButton extends StatelessWidget {
   });
   final String label;
   final DateTime value;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   @override
   Widget build(BuildContext context) => InkWell(
     onTap: onTap,

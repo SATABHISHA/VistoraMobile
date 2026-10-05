@@ -555,6 +555,12 @@ class DashboardScreen extends ConsumerWidget {
           VistoraColors.pink,
           '/platform/onboarding',
         ),
+        const _Module(
+          'Support Tickets',
+          Icons.support_agent_outlined,
+          VistoraColors.cyan,
+          '/support-tickets',
+        ),
         if (session.features.mr)
           const _Module(
             'MR Visits',
@@ -637,6 +643,12 @@ class DashboardScreen extends ConsumerWidget {
           VistoraColors.orange,
           '/projects',
         ),
+      const _Module(
+        'Support Tickets',
+        Icons.support_agent_outlined,
+        VistoraColors.cyan,
+        '/support-tickets',
+      ),
       const _Module(
         'Interviews',
         Icons.record_voice_over_outlined,
@@ -1118,8 +1130,9 @@ class _Hero extends StatelessWidget {
   );
 }
 
-class _BillingSummaryCard extends StatelessWidget {
-  const _BillingSummaryCard({required this.bills, required this.onTap});
+// ignore: unused_element
+class _BillingSummaryCardLegacy extends StatelessWidget {
+  const _BillingSummaryCardLegacy({required this.bills, required this.onTap});
 
   final List<PlatformBill> bills;
   final VoidCallback onTap;
@@ -1168,6 +1181,143 @@ class _BillingSummaryCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _BillingSummaryCard extends StatefulWidget {
+  const _BillingSummaryCard({required this.bills, required this.onTap});
+
+  final List<PlatformBill> bills;
+  final VoidCallback onTap;
+
+  @override
+  State<_BillingSummaryCard> createState() => _BillingSummaryCardState();
+}
+
+class _BillingSummaryCardState extends State<_BillingSummaryCard>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1900),
+  );
+
+  bool get _hasOverdue => widget.bills.any((bill) => bill.overdue);
+
+  @override
+  void initState() {
+    super.initState();
+    if (_hasOverdue) _pulse.repeat(reverse: true);
+  }
+
+  @override
+  void didUpdateWidget(covariant _BillingSummaryCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_hasOverdue && !_pulse.isAnimating) {
+      _pulse.repeat(reverse: true);
+    } else if (!_hasOverdue && _pulse.isAnimating) {
+      _pulse.stop();
+      _pulse.value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final total = widget.bills.fold<double>(
+      0,
+      (sum, bill) => sum + bill.totalAmount,
+    );
+    final overdue = widget.bills.where((bill) => bill.overdue).length;
+    return AnimatedBuilder(
+      animation: _pulse,
+      builder: (context, child) {
+        final glow = _hasOverdue ? _pulse.value : 0.0;
+        return Card(
+          clipBehavior: Clip.antiAlias,
+          elevation: _hasOverdue ? 3 + glow * 7 : null,
+          shadowColor: _hasOverdue
+              ? Color.lerp(
+                  const Color(0x66EF4444),
+                  const Color(0x00EF4444),
+                  glow,
+                )
+              : null,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(
+              color: _hasOverdue
+                  ? Color.lerp(
+                      const Color(0x99EF4444),
+                      const Color(0x44FCA5A5),
+                      glow,
+                    )!
+                  : Colors.transparent,
+            ),
+          ),
+          child: InkWell(
+            onTap: widget.onTap,
+            child: Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: _hasOverdue
+                      ? const [Color(0xFF4A171F), Color(0xFF24152A)]
+                      : const [Color(0xFF271A3C), Color(0xFF10283C)],
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    _hasOverdue
+                        ? Icons.warning_amber_rounded
+                        : Icons.receipt_long_outlined,
+                    color: _hasOverdue
+                        ? Color.lerp(
+                            const Color(0xFFFCA5A5),
+                            const Color(0xFFFF5C5C),
+                            glow,
+                          )
+                        : VistoraColors.amber,
+                    size: 30,
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _hasOverdue
+                              ? 'Payment overdue'
+                              : 'Outstanding billing',
+                          style: const TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _hasOverdue
+                              ? '$overdue overdue bill${overdue == 1 ? '' : 's'} require attention - INR ${total.toStringAsFixed(2)}'
+                              : '${widget.bills.length} bill${widget.bills.length == 1 ? '' : 's'} - INR ${total.toStringAsFixed(2)}',
+                          style: TextStyle(
+                            color: _hasOverdue
+                                ? const Color(0xFFFECACA)
+                                : VistoraColors.muted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.arrow_forward_ios, size: 16),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

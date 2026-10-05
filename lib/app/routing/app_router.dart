@@ -24,6 +24,7 @@ import 'package:vistora_mobile/features/platform_admin/presentation/platform_adm
 import 'package:vistora_mobile/features/performance/presentation/performance_screen.dart';
 import 'package:vistora_mobile/features/profile/presentation/profile_screen.dart';
 import 'package:vistora_mobile/features/salary/presentation/salary_management_screen.dart';
+import 'package:vistora_mobile/features/support/presentation/support_tickets_screen.dart';
 import 'package:vistora_mobile/features/tenant_settings/presentation/tenant_settings_screen.dart';
 import 'package:vistora_mobile/features/tax_invoices/presentation/tax_invoices_screen.dart';
 import 'package:vistora_mobile/features/work/presentation/employee_work_screen.dart';
@@ -258,6 +259,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/performance',
             builder: (context, state) => const PerformanceScreen(),
+          ),
+          GoRoute(
+            path: '/support-tickets',
+            builder: (context, state) => const SupportTicketsScreen(),
           ),
           GoRoute(
             path: '/interviews',

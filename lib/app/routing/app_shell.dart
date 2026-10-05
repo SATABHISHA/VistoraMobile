@@ -78,6 +78,12 @@ class AppShell extends StatelessWidget {
           Icons.how_to_reg,
           '/platform/onboarding',
         ),
+        _ShellDestination(
+          'Support',
+          Icons.support_agent_outlined,
+          Icons.support_agent,
+          '/support-tickets',
+        ),
       ];
     }
     final isManager = const {
