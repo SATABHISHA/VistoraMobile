@@ -377,7 +377,7 @@ class _SupportFilters extends StatelessWidget {
             children: [
               Expanded(
                 child: DropdownButtonFormField<String>(
-                  initialValue: status.isEmpty ? null : status,
+                  value: status.isEmpty ? null : status,
                   decoration: const InputDecoration(labelText: 'Status'),
                   items: const [
                     DropdownMenuItem(value: null, child: Text('All statuses')),
@@ -398,7 +398,7 @@ class _SupportFilters extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: DropdownButtonFormField<String>(
-                  initialValue: priority.isEmpty ? null : priority,
+                  value: priority.isEmpty ? null : priority,
                   decoration: const InputDecoration(labelText: 'Priority'),
                   items: const [
                     DropdownMenuItem(
@@ -420,7 +420,7 @@ class _SupportFilters extends StatelessWidget {
             children: [
               Expanded(
                 child: DropdownButtonFormField<int>(
-                  initialValue: perPage,
+                  value: perPage,
                   decoration: const InputDecoration(labelText: 'Rows per page'),
                   items: const [
                     DropdownMenuItem(value: 5, child: Text('5 rows')),
@@ -697,7 +697,7 @@ class _CreateTicketSheetState extends State<_CreateTicketSheet> {
             children: [
               Expanded(
                 child: DropdownButtonFormField<String>(
-                  initialValue: _category,
+                  value: _category,
                   decoration: const InputDecoration(labelText: 'Category'),
                   items: const [
                     DropdownMenuItem(value: 'general', child: Text('General')),
@@ -718,7 +718,7 @@ class _CreateTicketSheetState extends State<_CreateTicketSheet> {
               const SizedBox(width: 10),
               Expanded(
                 child: DropdownButtonFormField<String>(
-                  initialValue: _priority,
+                  value: _priority,
                   decoration: const InputDecoration(labelText: 'Priority'),
                   items: const [
                     DropdownMenuItem(value: 'low', child: Text('Low')),

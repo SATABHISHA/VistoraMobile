@@ -380,7 +380,7 @@ class _TeamUpdatesView extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.all(14),
             child: DropdownButtonFormField<int?>(
-              initialValue: selected,
+              value: selected,
               isExpanded: true,
               decoration: const InputDecoration(
                 labelText: 'Project filter',
@@ -1084,7 +1084,7 @@ class _CreateProjectSheetState extends ConsumerState<_CreateProjectSheet> {
           const SizedBox(height: 16),
           if (widget.canChangeSupervisor) ...[
             DropdownButtonFormField<int?>(
-              initialValue: supervisorId,
+              value: supervisorId,
               decoration: const InputDecoration(
                 labelText: 'Project supervisor',
               ),
@@ -1414,7 +1414,7 @@ class _ProjectMembersSheetState extends ConsumerState<_ProjectMembersSheet> {
             if (widget.canChangeSupervisor) ...[
               const SizedBox(height: 16),
               DropdownButtonFormField<int?>(
-                initialValue: supervisorId,
+                value: supervisorId,
                 decoration: const InputDecoration(
                   labelText: 'Project supervisor',
                 ),
@@ -1594,7 +1594,7 @@ class _ProjectUpdateSheetState extends ConsumerState<_ProjectUpdateSheet> {
           ),
           const SizedBox(height: 16),
           DropdownButtonFormField<String>(
-            initialValue: period,
+            value: period,
             decoration: const InputDecoration(labelText: 'Reporting period'),
             items: const ['daily', 'weekly', 'monthly']
                 .map(
@@ -1783,7 +1783,7 @@ class _InterviewsTabState extends ConsumerState<_InterviewsTab> {
                   ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String?>(
-                    initialValue: _mode,
+                    value: _mode,
                     decoration: const InputDecoration(labelText: 'Mode'),
                     items: const [
                       DropdownMenuItem(value: null, child: Text('All modes')),
@@ -2365,7 +2365,7 @@ class _InterviewFeedbackSheetState
           ),
           const SizedBox(height: 16),
           DropdownButtonFormField<int>(
-            initialValue: rating,
+            value: rating,
             decoration: const InputDecoration(labelText: 'Rating'),
             items: [5, 4, 3, 2, 1]
                 .map(
@@ -2377,7 +2377,7 @@ class _InterviewFeedbackSheetState
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
-            initialValue: recommendation,
+            value: recommendation,
             decoration: const InputDecoration(labelText: 'Recommendation'),
             items: const ['strong_hire', 'hire', 'hold', 'reject']
                 .map(

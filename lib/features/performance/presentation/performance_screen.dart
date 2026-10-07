@@ -233,7 +233,7 @@ class _PerformanceScreenState extends ConsumerState<PerformanceScreen>
         builder: (context, constraints) {
           final compact = constraints.maxWidth < 520;
           final year = DropdownButtonFormField<int>(
-            initialValue: _period.year,
+            value: _period.year,
             decoration: const InputDecoration(
               labelText: 'Year',
               prefixIcon: Icon(Icons.event_outlined),
@@ -252,7 +252,7 @@ class _PerformanceScreenState extends ConsumerState<PerformanceScreen>
             },
           );
           final month = DropdownButtonFormField<int>(
-            initialValue: _period.month,
+            value: _period.month,
             decoration: const InputDecoration(
               labelText: 'Month',
               prefixIcon: Icon(Icons.calendar_month_outlined),
@@ -497,7 +497,7 @@ class _PerformanceSearchTools extends StatelessWidget {
               ),
             );
             final pageSizeField = DropdownButtonFormField<int>(
-              initialValue: pageSize,
+              value: pageSize,
               decoration: const InputDecoration(
                 labelText: 'Rows per page',
                 prefixIcon: Icon(Icons.view_list_outlined),
@@ -1376,7 +1376,7 @@ class _ReviewFormSheetState extends ConsumerState<_ReviewFormSheet> {
             Text(DateFormat.yMMMM().format(widget.period)),
             const SizedBox(height: 16),
             DropdownButtonFormField<int>(
-              initialValue: employeeId,
+              value: employeeId,
               decoration: const InputDecoration(labelText: 'Employee'),
               items: [
                 for (final employee in employees)
