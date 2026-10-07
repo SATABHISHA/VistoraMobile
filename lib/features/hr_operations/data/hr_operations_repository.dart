@@ -1,4 +1,7 @@
 import 'package:vistora_mobile/core/api/api_client.dart';
+import 'dart:io';
+
+import 'package:path_provider/path_provider.dart';
 import 'package:vistora_mobile/core/api/api_parsing.dart';
 import 'package:vistora_mobile/features/hr_operations/domain/hr_operations_models.dart';
 
@@ -15,6 +18,23 @@ class HrOperationsRepository {
       response,
     ).map((item) => HrEmployee.fromJson(asMap(item))).toList();
   }
+
+  Future<HrPage<HrEmployee>> employeePage({
+    String? query,
+    int page = 1,
+    int perPage = 10,
+  }) async => _page(
+    await _api.get(
+      '/employees',
+      queryParameters: {
+        'q': ?query,
+        'status': 'active',
+        'page': page,
+        'perPage': perPage,
+      },
+    ),
+    HrEmployee.fromJson,
+  );
 
   Future<HrPage<RecruitmentCandidate>> candidates({
     String? query,
@@ -76,10 +96,31 @@ class HrOperationsRepository {
     );
   }
 
-  Future<void> pipelineAction(int candidateId, String action) => _api.post(
+  Future<Map<String, dynamic>> pipelineActionResult(
+    int candidateId,
+    String action,
+  ) => _api.post(
     '/recruitment/$candidateId/pipeline-action',
     data: {'action': action},
   );
+
+  Future<void> pipelineAction(int candidateId, String action) async {
+    await pipelineActionResult(candidateId, action);
+  }
+
+  Future<String> downloadResume({
+    required int candidateId,
+    required String fileName,
+  }) async {
+    final response = await _api.download(
+      '/recruitment/candidates/$candidateId/resume',
+    );
+    final directory = await getTemporaryDirectory();
+    final safeName = fileName.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+    final output = File('${directory.path}${Platform.pathSeparator}$safeName');
+    await output.writeAsBytes(response.data ?? const <int>[], flush: true);
+    return output.path;
+  }
 
   Future<({bool rescheduled, String emailMessage})> scheduleInterview({
     required int candidateId,

@@ -35,6 +35,7 @@ class HrEmployee {
 
   factory HrEmployee.fromJson(Map<String, dynamic> json) {
     final designation = asMap(json['designation']);
+    final user = asMap(json['user']);
     final name = [json['first_name'], json['middle_name'], json['last_name']]
         .where((item) => item != null && item.toString().trim().isNotEmpty)
         .join(' ');
@@ -43,7 +44,9 @@ class HrEmployee {
       userId: _intOrNull(json['user_id']),
       name: name.isEmpty ? 'Employee' : name,
       code: json['emp_code']?.toString() ?? '—',
-      email: asNullableString(json['work_email'] ?? json['personal_email']),
+      email: asNullableString(
+        json['work_email'] ?? json['personal_email'] ?? user['email'],
+      ),
       designation: asNullableString(
         designation['name'] ?? json['designation_name'],
       ),
@@ -148,6 +151,7 @@ class RecruitmentCandidate {
     this.phone,
     this.position,
     this.source,
+    this.resumeName,
     this.recruitedEmployeeId,
     this.interviewCount = 0,
     this.interviews = const [],
@@ -159,6 +163,7 @@ class RecruitmentCandidate {
   final String? phone;
   final String? position;
   final String? source;
+  final String? resumeName;
   final int? recruitedEmployeeId;
   final int interviewCount;
   final List<RecruitmentInterview> interviews;
@@ -168,6 +173,7 @@ class RecruitmentCandidate {
       .toList(growable: false);
 
   factory RecruitmentCandidate.fromJson(Map<String, dynamic> json) {
+    final resume = asMap(json['resume']);
     final name = [json['first_name'], json['last_name']]
         .where((item) => item != null && item.toString().trim().isNotEmpty)
         .join(' ');
@@ -182,6 +188,7 @@ class RecruitmentCandidate {
       phone: asNullableString(json['phone']),
       position: asNullableString(json['position']),
       source: asNullableString(json['source']),
+      resumeName: asNullableString(resume['original_name']),
       recruitedEmployeeId: json['recruited_employee_id'] == null
           ? null
           : asInt(json['recruited_employee_id']),

@@ -4,9 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:open_filex/open_filex.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:vistora_mobile/app/providers.dart';
 import 'package:vistora_mobile/app/theme/app_theme.dart';
+import 'package:vistora_mobile/core/api/api_parsing.dart';
+import 'package:vistora_mobile/core/widgets/interview_action_confirmation.dart';
 import 'package:vistora_mobile/core/widgets/status_badge.dart';
 import 'package:vistora_mobile/features/hr_operations/data/hr_operations_repository.dart';
 import 'package:vistora_mobile/features/hr_operations/domain/hr_operations_models.dart';
@@ -119,6 +122,7 @@ class _RecruitmentTabState extends ConsumerState<_RecruitmentTab> {
     page: _page,
   );
   Future<void> _refresh({bool reset = false}) async {
+    if (!mounted) return;
     if (reset) _page = 1;
     setState(() {
       _future = _load();
@@ -168,17 +172,47 @@ class _RecruitmentTabState extends ConsumerState<_RecruitmentTab> {
   static String _date(DateTime value) =>
       '${value.year.toString().padLeft(4, '0')}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
 
-  Future<void> _mutate(Future<void> Function() action, String message) async {
+  Future<void> _mutate(
+    Future<void> Function() action,
+    String message, {
+    required String confirmation,
+  }) async {
     if (_busy) return;
     setState(() => _busy = true);
     try {
+      final confirmed = await confirmInterviewAction(
+        context,
+        title: 'Confirm recruitment action',
+        message: confirmation,
+      );
+      if (!confirmed || !mounted) return;
       await action();
-      await _refresh();
+      await _refresh(reset: true);
       if (mounted) _toast(message);
     } catch (error) {
       if (mounted) _toast(error.toString(), error: true);
     } finally {
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _rollbackAndNavigate(RecruitmentCandidate item) async {
+    final response = await repository.pipelineActionResult(item.id, 'back');
+    final candidate = asMap(asMap(response['data'])['candidate']);
+    final targetStatus = candidate['status']?.toString().trim().toLowerCase();
+    if (mounted && targetStatus != null && targetStatus.isNotEmpty) {
+      _debounce?.cancel();
+      _search.clear();
+      _interviewMode = null;
+      _interviewFrom = null;
+      _interviewTo = null;
+      _status = targetStatus;
+      _page = 1;
+      if (targetStatus == 'interview') {
+        _interviewView = item.interviewFeedback.isNotEmpty
+            ? 'completed'
+            : 'assigned';
+      }
     }
   }
 
@@ -191,6 +225,29 @@ class _RecruitmentTabState extends ConsumerState<_RecruitmentTab> {
         ),
       );
 
+  Future<void> _downloadResume(RecruitmentCandidate candidate) async {
+    final resumeName = candidate.resumeName;
+    if (_busy || resumeName == null || resumeName.isEmpty) return;
+    setState(() => _busy = true);
+    try {
+      final path = await repository.downloadResume(
+        candidateId: candidate.id,
+        fileName: resumeName,
+      );
+      final result = await OpenFilex.open(path);
+      if (mounted && result.type != ResultType.done) {
+        _toast(
+          'Resume downloaded, but no compatible app could open it.',
+          error: true,
+        );
+      }
+    } catch (error) {
+      if (mounted) _toast(error.toString(), error: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _addCandidate() async {
     final result = await showModalBottomSheet<Map<String, dynamic>>(
       context: context,
@@ -202,12 +259,12 @@ class _RecruitmentTabState extends ConsumerState<_RecruitmentTab> {
       await _mutate(
         () => repository.createCandidate(result),
         'Candidate added to the recruitment pipeline.',
+        confirmation: 'Add this candidate to the recruitment pipeline?',
       );
     }
   }
 
   Future<void> _schedule(RecruitmentCandidate candidate) async {
-    final employees = await repository.employees();
     final activeInterview = candidate.interviews
         .where((item) => item.status == 'scheduled')
         .fold<RecruitmentInterview?>(
@@ -222,7 +279,7 @@ class _RecruitmentTabState extends ConsumerState<_RecruitmentTab> {
       useSafeArea: true,
       builder: (_) => _InterviewEditor(
         candidate: candidate,
-        employees: employees.where((item) => item.userId != null).toList(),
+        loadEmployees: repository.employeePage,
         initialInterview: activeInterview,
       ),
     );
@@ -230,6 +287,16 @@ class _RecruitmentTabState extends ConsumerState<_RecruitmentTab> {
       if (_busy) return;
       setState(() => _busy = true);
       try {
+        final confirmed = await confirmInterviewAction(
+          context,
+          title: activeInterview == null
+              ? 'Schedule interview?'
+              : 'Reschedule interview?',
+          message:
+              '${candidate.name} — ${DateFormat('dd MMM yyyy, h:mm a').format(result.scheduledAt)}. '
+              'The selected panelists will be notified.',
+        );
+        if (!confirmed || !mounted) return;
         final delivery = activeInterview == null
             ? await repository.scheduleInterview(
                 candidateId: candidate.id,
@@ -245,7 +312,15 @@ class _RecruitmentTabState extends ConsumerState<_RecruitmentTab> {
                 mode: result.mode,
                 notes: result.notes,
               );
-        await _refresh();
+        if (!mounted) return;
+        _debounce?.cancel();
+        _search.clear();
+        _status = 'interview';
+        _interviewView = 'assigned';
+        _interviewMode = null;
+        _interviewFrom = null;
+        _interviewTo = null;
+        await _refresh(reset: true);
         if (mounted) {
           _toast(
             '${activeInterview == null ? 'Interview scheduled' : 'Interview rescheduled'}. ${delivery.emailMessage}',
@@ -288,6 +363,7 @@ class _RecruitmentTabState extends ConsumerState<_RecruitmentTab> {
                 ),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String?>(
+                  key: ValueKey(_status),
                   value: _status,
                   decoration: const InputDecoration(
                     labelText: 'Pipeline stage',
@@ -595,6 +671,26 @@ class _RecruitmentTabState extends ConsumerState<_RecruitmentTab> {
             '${item.source ?? 'Direct'} • ${item.phone ?? 'No phone'} • ${item.interviewCount} interview(s)',
             style: Theme.of(context).textTheme.bodySmall,
           ),
+          if (item.resumeName != null) ...[
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                const Icon(
+                  Icons.attach_file_outlined,
+                  size: 16,
+                  color: VistoraColors.green,
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    item.resumeName!,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: VistoraColors.green),
+                  ),
+                ),
+              ],
+            ),
+          ],
           if (item.interviews.isNotEmpty)
             Text(
               _interviewSummary(item.interviews),
@@ -610,6 +706,12 @@ class _RecruitmentTabState extends ConsumerState<_RecruitmentTab> {
             spacing: 7,
             runSpacing: 7,
             children: [
+              if (item.resumeName != null)
+                OutlinedButton.icon(
+                  onPressed: _busy ? null : () => _downloadResume(item),
+                  icon: const Icon(Icons.download_outlined),
+                  label: const Text('View / download resume'),
+                ),
               if (item.status == 'applied')
                 FilledButton.tonal(
                   onPressed: _busy
@@ -617,6 +719,7 @@ class _RecruitmentTabState extends ConsumerState<_RecruitmentTab> {
                       : () => _mutate(
                           () => repository.pipelineAction(item.id, 'screening'),
                           'Candidate moved to screening.',
+                          confirmation: 'Move ${item.name} to screening?',
                         ),
                   child: const Text('Accept for screening'),
                 ),
@@ -647,6 +750,8 @@ class _RecruitmentTabState extends ConsumerState<_RecruitmentTab> {
                   ),
                 ),
               if (const {
+                'screening',
+                'interview',
                 'selected',
                 'offered',
                 'joined',
@@ -656,8 +761,11 @@ class _RecruitmentTabState extends ConsumerState<_RecruitmentTab> {
                   onPressed: _busy
                       ? null
                       : () => _mutate(
-                          () => repository.pipelineAction(item.id, 'back'),
+                          () => _rollbackAndNavigate(item),
                           'Candidate rolled back to the previous pipeline step.',
+                          confirmation:
+                              'Roll back ${item.name} to the previous pipeline step? '
+                              'The destination list will open automatically.',
                         ),
                   icon: const Icon(Icons.undo_outlined),
                   label: const Text('Rollback'),
@@ -669,6 +777,7 @@ class _RecruitmentTabState extends ConsumerState<_RecruitmentTab> {
                       : () => _mutate(
                           () => repository.pipelineAction(item.id, 'selected'),
                           'Candidate selected.',
+                          confirmation: 'Select ${item.name} for an offer?',
                         ),
                   child: const Text('Select'),
                 ),
@@ -679,6 +788,7 @@ class _RecruitmentTabState extends ConsumerState<_RecruitmentTab> {
                       : () => _mutate(
                           () => repository.pipelineAction(item.id, 'hold'),
                           'Candidate placed on hold.',
+                          confirmation: 'Put ${item.name} on hold?',
                         ),
                   child: const Text('Hold'),
                 ),
@@ -689,6 +799,7 @@ class _RecruitmentTabState extends ConsumerState<_RecruitmentTab> {
                       : () => _mutate(
                           () => repository.pipelineAction(item.id, 'rejected'),
                           'Candidate rejected.',
+                          confirmation: 'Reject ${item.name}?',
                         ),
                   child: const Text('Reject'),
                 ),
@@ -697,8 +808,10 @@ class _RecruitmentTabState extends ConsumerState<_RecruitmentTab> {
                   onPressed: _busy
                       ? null
                       : () => _mutate(
-                          () => repository.pipelineAction(item.id, 'back'),
-                          'Candidate returned to screening.',
+                          () => _rollbackAndNavigate(item),
+                          'Candidate returned to the previous pipeline step.',
+                          confirmation:
+                              'Resume the recruitment process for ${item.name}?',
                         ),
                   child: const Text('Resume pipeline'),
                 ),
@@ -937,7 +1050,7 @@ class _OffersTabState extends ConsumerState<_OffersTab> {
         payGroups: options.payGroups,
       ),
     );
-    if (result == null) return;
+    if (result == null || !mounted) return;
     await _action(
       () => repository.generateOffer(
         candidateId: result.candidateId,
@@ -949,6 +1062,8 @@ class _OffersTabState extends ConsumerState<_OffersTab> {
         components: result.components,
       ),
       'Tenant-branded offer letter generated.',
+      confirmation:
+          'Generate and save this candidate\'s offer letter using the selected terms?',
     );
   }
 
@@ -959,13 +1074,14 @@ class _OffersTabState extends ConsumerState<_OffersTab> {
       useSafeArea: true,
       builder: (_) => const _TemplateEditor(type: 'offer'),
     );
-    if (result != null) {
+    if (result != null && mounted) {
       await _action(
         () => repository.saveOfferTemplate(
           name: result['name']!,
           bodyHtml: result['body']!,
         ),
         'Offer template saved.',
+        confirmation: 'Save this offer template?',
       );
     }
   }
@@ -974,11 +1090,17 @@ class _OffersTabState extends ConsumerState<_OffersTab> {
     if (_busy) return;
     setState(() => _busy = true);
     try {
+      final confirmed = await confirmInterviewAction(
+        context,
+        title: 'Send offer letter?',
+        message: 'Email the offer letter to ${offer.candidateEmail}?',
+      );
+      if (!confirmed || !mounted) return;
       final delivery = await repository.emailOffer(
         offerId: offer.id,
         email: offer.candidateEmail,
       );
-      if (delivery.sent) await _refresh();
+      if (delivery.sent && mounted) await _refresh(reset: true);
       if (mounted) _snack(context, delivery.message, success: delivery.sent);
     } catch (error) {
       if (mounted) _snack(context, error.toString(), success: false);
@@ -987,12 +1109,22 @@ class _OffersTabState extends ConsumerState<_OffersTab> {
     }
   }
 
-  Future<void> _action(Future<void> Function() fn, String message) async {
+  Future<void> _action(
+    Future<void> Function() fn,
+    String message, {
+    required String confirmation,
+  }) async {
     if (_busy) return;
     setState(() => _busy = true);
     try {
+      final confirmed = await confirmInterviewAction(
+        context,
+        title: 'Confirm offer action',
+        message: confirmation,
+      );
+      if (!confirmed || !mounted) return;
       await fn();
-      await _refresh();
+      if (mounted) await _refresh(reset: true);
       if (mounted) _snack(context, message);
     } catch (e) {
       if (mounted) _snack(context, e.toString());
@@ -1179,6 +1311,8 @@ class _OffersTabState extends ConsumerState<_OffersTab> {
                   onSelected: (status) => _action(
                     () => repository.updateOfferStatus(item.id, status),
                     'Offer marked $status.',
+                    confirmation:
+                        'Mark ${item.candidateName}\'s offer as $status?',
                   ),
                   itemBuilder: (_) => const [
                     PopupMenuItem(
@@ -1710,11 +1844,16 @@ class _InterviewInput {
 class _InterviewEditor extends StatefulWidget {
   const _InterviewEditor({
     required this.candidate,
-    required this.employees,
+    required this.loadEmployees,
     this.initialInterview,
   });
   final RecruitmentCandidate candidate;
-  final List<HrEmployee> employees;
+  final Future<HrPage<HrEmployee>> Function({
+    String? query,
+    int page,
+    int perPage,
+  })
+  loadEmployees;
   final RecruitmentInterview? initialInterview;
   @override
   State<_InterviewEditor> createState() => _InterviewEditorState();
@@ -1725,6 +1864,12 @@ class _InterviewEditorState extends State<_InterviewEditor> {
   late TimeOfDay time;
   String mode = 'in_person';
   final selected = <int>{};
+  final selectedNames = <int, String>{};
+  final panelistSearch = TextEditingController();
+  late Future<HrPage<HrEmployee>> panelistFuture;
+  Timer? panelistSearchDebounce;
+  int panelistPage = 1;
+  int panelistRowsPerPage = 10;
   final notes = TextEditingController();
 
   @override
@@ -1733,20 +1878,252 @@ class _InterviewEditorState extends State<_InterviewEditor> {
     final existing = widget.initialInterview;
     if (existing == null) {
       time = const TimeOfDay(hour: 10, minute: 0);
+      panelistFuture = _loadPanelists();
       return;
     }
     date = existing.scheduledAt;
     time = TimeOfDay.fromDateTime(existing.scheduledAt);
     mode = existing.mode;
-    selected.addAll(existing.panelists.map((item) => item.id));
+    for (final panelist in existing.panelists) {
+      selected.add(panelist.id);
+      selectedNames[panelist.id] = panelist.name;
+    }
     notes.text = existing.notes ?? '';
+    panelistFuture = _loadPanelists();
+  }
+
+  Future<HrPage<HrEmployee>> _loadPanelists() => widget.loadEmployees(
+    query: panelistSearch.text.trim().isEmpty
+        ? null
+        : panelistSearch.text.trim(),
+    page: panelistPage,
+    perPage: panelistRowsPerPage,
+  );
+
+  void _searchPanelists(String value) {
+    panelistSearchDebounce?.cancel();
+    panelistSearchDebounce = Timer(const Duration(milliseconds: 320), () {
+      if (!mounted) return;
+      setState(() {
+        panelistPage = 1;
+        panelistFuture = _loadPanelists();
+      });
+    });
+  }
+
+  void _changePanelistPage(int page) {
+    if (page < 1) return;
+    setState(() {
+      panelistPage = page;
+      panelistFuture = _loadPanelists();
+    });
+  }
+
+  void _changePanelistRows(int? value) {
+    if (value == null || value == panelistRowsPerPage) return;
+    setState(() {
+      panelistRowsPerPage = value;
+      panelistPage = 1;
+      panelistFuture = _loadPanelists();
+    });
+  }
+
+  void _togglePanelist(HrEmployee employee, bool checked) {
+    final userId = employee.userId;
+    if (userId == null) return;
+    setState(() {
+      if (checked) {
+        selected.add(userId);
+        selectedNames[userId] = employee.name;
+      } else {
+        selected.remove(userId);
+        selectedNames.remove(userId);
+      }
+    });
   }
 
   @override
   void dispose() {
+    panelistSearchDebounce?.cancel();
+    panelistSearch.dispose();
     notes.dispose();
     super.dispose();
   }
+
+  Widget _panelistPicker() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      TextField(
+        controller: panelistSearch,
+        onChanged: _searchPanelists,
+        decoration: const InputDecoration(
+          labelText: 'Search panelists',
+          hintText: 'Name, employee code or email',
+          prefixIcon: Icon(Icons.search),
+          suffixIcon: Icon(Icons.auto_awesome),
+        ),
+      ),
+      const SizedBox(height: 8),
+      DropdownButtonFormField<int>(
+        value: panelistRowsPerPage,
+        decoration: const InputDecoration(
+          labelText: 'Panelists per page',
+          prefixIcon: Icon(Icons.view_list),
+        ),
+        items: const [10, 25, 50]
+            .map(
+              (value) => DropdownMenuItem(
+                value: value,
+                child: Text('$value panelists'),
+              ),
+            )
+            .toList(),
+        onChanged: _changePanelistRows,
+      ),
+      if (selected.isNotEmpty) ...[
+        const SizedBox(height: 10),
+        Text(
+          '${selected.length} panelist${selected.length == 1 ? '' : 's'} selected',
+          style: const TextStyle(fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: selected
+              .map(
+                (id) => InputChip(
+                  label: Text(selectedNames[id] ?? 'Panelist #$id'),
+                  onDeleted: () => setState(() {
+                    selected.remove(id);
+                    selectedNames.remove(id);
+                  }),
+                ),
+              )
+              .toList(),
+        ),
+      ],
+      const SizedBox(height: 8),
+      DecoratedBox(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: Theme.of(context).colorScheme.outlineVariant,
+          ),
+        ),
+        child: SizedBox(
+          height: 270,
+          child: FutureBuilder<HrPage<HrEmployee>>(
+            future: panelistFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snapshot.hasError) {
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.cloud_off),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Panelists could not be loaded. Check your connection and try again.',
+                          textAlign: TextAlign.center,
+                        ),
+                        TextButton.icon(
+                          onPressed: () =>
+                              setState(() => panelistFuture = _loadPanelists()),
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Try again'),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+              final page = snapshot.data!;
+              final employees = page.items
+                  .where((employee) => employee.userId != null)
+                  .toList(growable: false);
+              if (employees.isEmpty) {
+                return const Center(
+                  child: Text('No matching panelists found.'),
+                );
+              }
+              return Column(
+                children: [
+                  Expanded(
+                    child: ListView.builder(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      itemCount: employees.length,
+                      itemBuilder: (_, index) {
+                        final employee = employees[index];
+                        final userId = employee.userId!;
+                        return CheckboxListTile(
+                          dense: true,
+                          value: selected.contains(userId),
+                          title: Text(employee.name),
+                          subtitle: Text(
+                            [
+                                  employee.code,
+                                  employee.designation,
+                                  employee.email,
+                                ]
+                                .whereType<String>()
+                                .where((value) => value.isNotEmpty)
+                                .join(' • '),
+                          ),
+                          onChanged: (checked) =>
+                              _togglePanelist(employee, checked == true),
+                        );
+                      },
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Row(
+                      children: [
+                        IconButton(
+                          tooltip: 'Previous panelists',
+                          onPressed: page.page > 1
+                              ? () => _changePanelistPage(page.page - 1)
+                              : null,
+                          icon: const Icon(Icons.chevron_left),
+                        ),
+                        Expanded(
+                          child: Text(
+                            'Page ${page.page} of ${page.lastPage} • ${page.total} employees',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Next panelists',
+                          onPressed: page.hasMore
+                              ? () => _changePanelistPage(page.page + 1)
+                              : null,
+                          icon: const Icon(Icons.chevron_right),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+      const SizedBox(height: 6),
+      Text(
+        'Select multiple panelists. Your selections stay selected while you search or change pages.',
+        style: Theme.of(context).textTheme.bodySmall,
+      ),
+    ],
+  );
 
   @override
   Widget build(BuildContext context) => _FormSheet(
@@ -1787,17 +2164,7 @@ class _InterviewEditorState extends State<_InterviewEditor> {
         onChanged: (value) => setState(() => mode = value ?? mode),
       ),
       const Text('Panelists', style: TextStyle(fontWeight: FontWeight.w900)),
-      for (final employee in widget.employees)
-        CheckboxListTile(
-          contentPadding: EdgeInsets.zero,
-          value: selected.contains(employee.userId),
-          title: Text('${employee.name} (${employee.code})'),
-          onChanged: (checked) => setState(
-            () => checked == true
-                ? selected.add(employee.userId!)
-                : selected.remove(employee.userId),
-          ),
-        ),
+      _panelistPicker(),
       TextField(
         controller: notes,
         minLines: 2,
@@ -1871,6 +2238,11 @@ class _OfferEditorState extends State<_OfferEditor> {
   int? candidateId, templateId, payGroupId;
   DateTime start = DateTime.now().add(const Duration(days: 14));
   final position = TextEditingController(), ctc = TextEditingController();
+
+  RecruitmentCandidate? get selectedCandidate => widget.candidates
+      .where((candidate) => candidate.id == candidateId)
+      .firstOrNull;
+
   @override
   void dispose() {
     position.dispose();
@@ -1878,27 +2250,66 @@ class _OfferEditorState extends State<_OfferEditor> {
     super.dispose();
   }
 
+  Future<void> _chooseCandidate() async {
+    final selectedId = await showModalBottomSheet<int>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => _OfferCandidatePicker(
+        candidates: widget.candidates,
+        selectedId: candidateId,
+      ),
+    );
+    if (selectedId == null || !mounted) return;
+    final candidate = widget.candidates
+        .where((item) => item.id == selectedId)
+        .firstOrNull;
+    setState(() {
+      candidateId = selectedId;
+      position.text = candidate?.position ?? '';
+    });
+  }
+
   @override
   Widget build(BuildContext context) => _FormSheet(
     title: 'Generate offer letter',
     children: [
-      DropdownButtonFormField<int>(
-        value: candidateId,
-        isExpanded: true,
-        decoration: const InputDecoration(labelText: 'Candidate *'),
-        items: [
-          for (final c in widget.candidates)
-            DropdownMenuItem(value: c.id, child: Text(c.name)),
-        ],
-        onChanged: (value) {
-          final candidate = widget.candidates
-              .where((c) => c.id == value)
-              .firstOrNull;
-          setState(() {
-            candidateId = value;
-            position.text = candidate?.position ?? '';
-          });
-        },
+      InputDecorator(
+        decoration: const InputDecoration(
+          labelText: 'Candidate *',
+          prefixIcon: Icon(Icons.person_search_outlined),
+        ),
+        child: InkWell(
+          onTap: _chooseCandidate,
+          borderRadius: BorderRadius.circular(12),
+          child: Row(
+            children: [
+              Expanded(
+                child: selectedCandidate == null
+                    ? const Text('Search and select candidate')
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            selectedCandidate!.name,
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                          if (selectedCandidate!.email.isNotEmpty)
+                            Text(
+                              selectedCandidate!.email,
+                              style: const TextStyle(
+                                color: VistoraColors.muted,
+                                fontSize: 12,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                        ],
+                      ),
+              ),
+              const Icon(Icons.search_outlined),
+            ],
+          ),
+        ),
       ),
       DropdownButtonFormField<int>(
         value: templateId,
@@ -2020,6 +2431,142 @@ class _OfferEditorState extends State<_OfferEditor> {
       ),
     ],
   );
+}
+
+class _OfferCandidatePicker extends StatefulWidget {
+  const _OfferCandidatePicker({
+    required this.candidates,
+    required this.selectedId,
+  });
+  final List<RecruitmentCandidate> candidates;
+  final int? selectedId;
+
+  @override
+  State<_OfferCandidatePicker> createState() => _OfferCandidatePickerState();
+}
+
+class _OfferCandidatePickerState extends State<_OfferCandidatePicker> {
+  final search = TextEditingController();
+
+  @override
+  void dispose() {
+    search.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final query = search.text.trim().toLowerCase();
+    final candidates = widget.candidates
+        .where((candidate) {
+          if (query.isEmpty) return true;
+          return [
+            candidate.name,
+            candidate.email,
+            candidate.position ?? '',
+          ].any((value) => value.toLowerCase().contains(query));
+        })
+        .toList(growable: false);
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: FractionallySizedBox(
+        heightFactor: .86,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Select candidate',
+                      style: TextStyle(
+                        fontSize: 21,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    '${candidates.length} found',
+                    style: const TextStyle(color: VistoraColors.muted),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: TextField(
+                controller: search,
+                autofocus: true,
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(
+                  prefixIcon: Icon(Icons.search),
+                  hintText: 'Search name, email or position',
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Expanded(
+              child: candidates.isEmpty
+                  ? const Center(child: Text('No matching candidates found.'))
+                  : ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+                      itemCount: candidates.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 8),
+                      itemBuilder: (context, index) {
+                        final candidate = candidates[index];
+                        final selected = candidate.id == widget.selectedId;
+                        return Card(
+                          margin: EdgeInsets.zero,
+                          child: ListTile(
+                            onTap: () => Navigator.pop(context, candidate.id),
+                            leading: CircleAvatar(
+                              backgroundColor: VistoraColors.pink.withValues(
+                                alpha: .16,
+                              ),
+                              child: Text(
+                                candidate.name.isEmpty
+                                    ? '?'
+                                    : candidate.name[0].toUpperCase(),
+                                style: const TextStyle(
+                                  color: VistoraColors.pink,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ),
+                            title: Text(
+                              candidate.name,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            subtitle: Text(
+                              [
+                                candidate.email,
+                                if ((candidate.position ?? '').isNotEmpty)
+                                  candidate.position!,
+                              ].where((value) => value.isNotEmpty).join(' • '),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            trailing: selected
+                                ? const Icon(
+                                    Icons.check_circle,
+                                    color: VistoraColors.green,
+                                  )
+                                : const Icon(Icons.chevron_right),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _OfferBreakupPreview extends StatelessWidget {

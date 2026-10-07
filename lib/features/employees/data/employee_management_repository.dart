@@ -31,6 +31,15 @@ class EmployeeManagementRepository {
     );
   }
 
+  /// Loads the tenant directory used by the supervisor picker.
+  /// The API caps a page at 200 records, which is enough for the mobile
+  /// picker while still including employees who are already supervisors via
+  /// an existing relationship.
+  Future<List<ManagedEmployee>> supervisorDirectory() async {
+    final page = await employees(perPage: 200);
+    return page.items;
+  }
+
   Future<void> create(Map<String, dynamic> data) =>
       _api.post('/employees', data: {'auto_emp_code': true, ...data});
 
@@ -74,7 +83,10 @@ class EmployeeManagementRepository {
     final invitation = asMap(data['invitation']);
     return (
       url: data['invitationUrl']?.toString() ?? '',
-      username: invitation['username']?.toString() ?? data['username']?.toString() ?? '',
+      username:
+          invitation['username']?.toString() ??
+          data['username']?.toString() ??
+          '',
     );
   }
 
@@ -88,7 +100,8 @@ class EmployeeManagementRepository {
     );
     return (
       sent: asMap(response['data'])['sent'] == true,
-      message: response['message']?.toString() ?? 'Unable to send onboarding email.',
+      message:
+          response['message']?.toString() ?? 'Unable to send onboarding email.',
     );
   }
 
@@ -100,7 +113,11 @@ class EmployeeManagementRepository {
   }) async {
     final response = await _api.post(
       '/employees/$employeeId/credentials/email',
-      data: {'username': username.trim(), 'email': email.trim(), 'password': password},
+      data: {
+        'username': username.trim(),
+        'email': email.trim(),
+        'password': password,
+      },
     );
     return (
       sent: asMap(response['data'])['sent'] == true,

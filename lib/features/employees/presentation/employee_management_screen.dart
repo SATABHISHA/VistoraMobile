@@ -95,15 +95,22 @@ class _EmployeeManagementScreenState
     );
     late final List<List<MasterItem>> masters;
     late final List<String> employmentTypes;
+    late final List<ManagedEmployee> supervisorDirectory;
     try {
-      masters = await Future.wait([
-        masterRepository.masters('branches'),
-        masterRepository.masters('states'),
-        masterRepository.masters('business_units'),
-        masterRepository.masters('departments'),
-        masterRepository.masters('designations'),
+      final result = await Future.wait<dynamic>([
+        Future.wait([
+          masterRepository.masters('branches'),
+          masterRepository.masters('states'),
+          masterRepository.masters('business_units'),
+          masterRepository.masters('departments'),
+          masterRepository.masters('designations'),
+        ]),
+        masterRepository.employmentTypes(),
+        repository.supervisorDirectory(),
       ]);
-      employmentTypes = await masterRepository.employmentTypes();
+      masters = (result[0] as List).cast<List<MasterItem>>();
+      employmentTypes = (result[1] as List).cast<String>();
+      supervisorDirectory = (result[2] as List).cast<ManagedEmployee>();
     } catch (error) {
       if (mounted) _snack('Unable to load employee dropdowns: $error');
       return;
@@ -124,6 +131,7 @@ class _EmployeeManagementScreenState
           'designations': masters[4],
         },
         employmentTypes: employmentTypes,
+        supervisorDirectory: supervisorDirectory,
         onAddMaster: _masterCreator(masterRepository),
       ),
     );
@@ -666,12 +674,14 @@ class _EmployeeEditorSheet extends StatefulWidget {
     this.employee,
     required this.masters,
     required this.employmentTypes,
+    required this.supervisorDirectory,
     required this.onAddMaster,
   });
 
   final ManagedEmployee? employee;
   final Map<String, List<MasterItem>> masters;
   final List<String> employmentTypes;
+  final List<ManagedEmployee> supervisorDirectory;
   final Future<List<MasterItem>> Function(String, String, String?) onAddMaster;
 
   @override
@@ -679,6 +689,10 @@ class _EmployeeEditorSheet extends StatefulWidget {
 }
 
 class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet> {
+  // Laravel date casts and the employee API persist dates as ISO dates.
+  static final DateFormat _apiDateFormat = DateFormat('yyyy-MM-dd');
+  static final DateFormat _legacyDisplayDateFormat = DateFormat('dd-MM-yyyy');
+
   late final Map<String, TextEditingController> _fields;
   late final Map<String, List<MasterItem>> _masterLists;
   late final List<String> _employmentTypes;
@@ -690,6 +704,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet> {
   late int? _departmentId;
   late int? _designationId;
   late bool _sameAddress;
+  late Set<int> _supervisorIds;
 
   ManagedEmployee? get employee => widget.employee;
 
@@ -711,7 +726,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet> {
     }
     String value(String? input) => input ?? '';
     String date(DateTime? input) =>
-        input == null ? '' : DateFormat('yyyy-MM-dd').format(input);
+        input == null ? '' : _apiDateFormat.format(input);
     _fields = {
       'prefix': TextEditingController(text: value(e?.prefix ?? 'Mr.')),
       'first_name': TextEditingController(text: value(e?.firstName)),
@@ -767,6 +782,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet> {
     _businessUnitId = e?.businessUnitId;
     _departmentId = e?.departmentId;
     _designationId = e?.designationId;
+    _supervisorIds = {...?e?.supervisorIds};
     _sameAddress =
         e != null &&
         e.currentAddress == e.permanentAddress &&
@@ -791,6 +807,24 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet> {
     return value.isEmpty ? null : value;
   }
 
+  /// Normalizes both the API format and the legacy display format before the
+  /// employee payload is sent to Laravel/MySQL.
+  String? apiDate(String key) {
+    final value = field(key).text.trim();
+    if (value.isEmpty) return null;
+
+    final isoDate = DateTime.tryParse(value);
+    if (isoDate != null) return _apiDateFormat.format(isoDate);
+
+    try {
+      return _apiDateFormat.format(_legacyDisplayDateFormat.parseStrict(value));
+    } on FormatException {
+      // Keep the original value so Laravel can return its normal validation
+      // error instead of silently changing an invalid date.
+      return value;
+    }
+  }
+
   Widget text(
     String key,
     String label, {
@@ -807,6 +841,217 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet> {
     textCapitalization: TextCapitalization.words,
     decoration: InputDecoration(labelText: label),
   );
+
+  Widget dateField(String key, String label, {DateTime? lastDate}) => TextField(
+    controller: field(key),
+    readOnly: true,
+    onTap: () => _pickDate(key, lastDate: lastDate),
+    decoration: InputDecoration(
+      labelText: label,
+      suffixIcon: IconButton(
+        tooltip: 'Choose $label',
+        onPressed: () => _pickDate(key, lastDate: lastDate),
+        icon: const Icon(Icons.calendar_month_outlined),
+      ),
+    ),
+  );
+
+  Future<void> _pickDate(String key, {DateTime? lastDate}) async {
+    final currentText = field(key).text.trim();
+    DateTime? current = DateTime.tryParse(currentText);
+    if (current == null && currentText.isNotEmpty) {
+      try {
+        current = _legacyDisplayDateFormat.parseStrict(currentText);
+      } on FormatException {
+        current = null;
+      }
+    }
+    final today = DateTime.now();
+    final firstDate = DateTime(1900);
+    final maximumDate = lastDate ?? DateTime(today.year + 20, 12, 31);
+    final initialDate =
+        current ??
+        (lastDate != null && lastDate.isBefore(today) ? lastDate : today);
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate.isBefore(firstDate)
+          ? firstDate
+          : initialDate.isAfter(maximumDate)
+          ? maximumDate
+          : initialDate,
+      firstDate: firstDate,
+      lastDate: maximumDate,
+      helpText: 'Select $key',
+    );
+    if (picked != null && mounted) {
+      field(key).text = _apiDateFormat.format(picked);
+      setState(() {});
+    }
+  }
+
+  List<ManagedEmployee> get _supervisorOptions {
+    final establishedSupervisorIds = widget.supervisorDirectory
+        .expand((item) => item.supervisorIds)
+        .toSet();
+    return widget.supervisorDirectory
+        .where(
+          (item) =>
+              item.id != employee?.id &&
+              (item.role.toLowerCase() == 'supervisor' ||
+                  establishedSupervisorIds.contains(item.id)),
+        )
+        .toList()
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+  }
+
+  Future<void> _chooseSupervisors() async {
+    final options = _supervisorOptions;
+    final search = TextEditingController();
+    final result = await showModalBottomSheet<Set<int>>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      builder: (sheetContext) {
+        var query = '';
+        final selected = {..._supervisorIds};
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final visible = options.where((item) {
+              final haystack =
+                  '${item.name} ${item.code} ${item.designation ?? ''}'
+                      .toLowerCase();
+              return haystack.contains(query.toLowerCase());
+            }).toList();
+            return SizedBox(
+              height: MediaQuery.sizeOf(context).height * .78,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'Select supervisors',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          '${selected.length} selected',
+                          style: const TextStyle(color: VistoraColors.muted),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: search,
+                      decoration: const InputDecoration(
+                        prefixIcon: Icon(Icons.search),
+                        hintText: 'Search supervisors',
+                      ),
+                      onChanged: (value) => setSheetState(() => query = value),
+                    ),
+                    const SizedBox(height: 8),
+                    Expanded(
+                      child: visible.isEmpty
+                          ? const Center(
+                              child: Text('No eligible supervisors found.'),
+                            )
+                          : ListView.builder(
+                              itemCount: visible.length,
+                              itemBuilder: (context, index) {
+                                final item = visible[index];
+                                return CheckboxListTile(
+                                  value: selected.contains(item.id),
+                                  onChanged: (checked) => setSheetState(() {
+                                    if (checked == true) {
+                                      selected.add(item.id);
+                                    } else {
+                                      selected.remove(item.id);
+                                    }
+                                  }),
+                                  title: Text(item.name),
+                                  subtitle: Text(
+                                    '${item.code} · ${item.designation ?? item.role}',
+                                  ),
+                                  controlAffinity:
+                                      ListTileControlAffinity.leading,
+                                  contentPadding: EdgeInsets.zero,
+                                );
+                              },
+                            ),
+                    ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.pop(sheetContext),
+                            child: const Text('Cancel'),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: FilledButton(
+                            onPressed: () =>
+                                Navigator.pop(sheetContext, selected),
+                            child: const Text('Apply'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+    search.dispose();
+    if (result != null && mounted) setState(() => _supervisorIds = result);
+  }
+
+  Widget supervisorsField() {
+    final names = _supervisorOptions
+        .where((item) => _supervisorIds.contains(item.id))
+        .map((item) => item.name)
+        .toList();
+    return InkWell(
+      onTap: _chooseSupervisors,
+      borderRadius: BorderRadius.circular(12),
+      child: InputDecorator(
+        decoration: const InputDecoration(
+          labelText: 'Supervisors (optional)',
+          suffixIcon: Icon(Icons.arrow_drop_down),
+        ),
+        child: names.isEmpty
+            ? const Text('Select one or more supervisors')
+            : Wrap(
+                spacing: 6,
+                runSpacing: 5,
+                children: names
+                    .map(
+                      (name) => Chip(
+                        label: Text(name),
+                        visualDensity: VisualDensity.compact,
+                        onDeleted: () => setState(() {
+                          final match = _supervisorOptions.firstWhere(
+                            (item) => item.name == name,
+                          );
+                          _supervisorIds.remove(match.id);
+                        }),
+                      ),
+                    )
+                    .toList(),
+              ),
+      ),
+    );
+  }
 
   Widget heading(String value) => Padding(
     padding: const EdgeInsets.only(top: 18, bottom: 9),
@@ -1020,7 +1265,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet> {
       'first_name': first,
       'middle_name': nullable('middle_name'),
       'last_name': last,
-      'dob': nullable('dob'),
+      'dob': apiDate('dob'),
       'gender': nullable('gender'),
       'marital_status': nullable('marital_status'),
       'blood_group': nullable('blood_group'),
@@ -1034,14 +1279,14 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet> {
       'pan': nullable('pan'),
       'aadhaar': nullable('aadhaar'),
       'passport_no': nullable('passport_no'),
-      'passport_expiry': nullable('passport_expiry'),
+      'passport_expiry': apiDate('passport_expiry'),
       'permanent_address': nullable('permanent_address'),
       'permanent_city': nullable('permanent_city'),
       'permanent_state': nullable('permanent_state'),
       'permanent_country': nullable('permanent_country'),
       'permanent_pin': nullable('permanent_pin'),
       ...current,
-      'doj': nullable('doj'),
+      'doj': apiDate('doj'),
       'role_type': _role,
       'employment_type': nullable('employment_type'),
       'employment_status': _employmentStatus,
@@ -1050,7 +1295,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet> {
       'business_unit_id': _businessUnitId,
       'department_id': _departmentId,
       'designation_id': _designationId,
-      'supervisor_ids': employee?.supervisorIds ?? const <int>[],
+      'supervisor_ids': _supervisorIds.toList(),
       if (field('emp_code').text.trim().isNotEmpty)
         'emp_code': field('emp_code').text.trim(),
     });
@@ -1095,7 +1340,13 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet> {
           const SizedBox(height: 10),
           Row(
             children: [
-              Expanded(child: text('dob', 'Date of birth')),
+              Expanded(
+                child: dateField(
+                  'dob',
+                  'Date of birth',
+                  lastDate: DateTime.now(),
+                ),
+              ),
               const SizedBox(width: 10),
               Expanded(child: text('nationality', 'Nationality')),
             ],
@@ -1196,7 +1447,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet> {
             children: [
               Expanded(child: text('emp_code', 'Employee code')),
               const SizedBox(width: 10),
-              Expanded(child: text('doj', 'Joining date')),
+              Expanded(child: dateField('doj', 'Joining date')),
             ],
           ),
           const SizedBox(height: 10),
@@ -1306,6 +1557,8 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet> {
               ),
             ],
           ),
+          const SizedBox(height: 18),
+          supervisorsField(),
           const SizedBox(height: 18),
           FilledButton.icon(
             onPressed: save,
@@ -1423,6 +1676,18 @@ class _EmployeeCard extends StatelessWidget {
                   _Tag(Icons.account_tree_outlined, employee.department!),
                 if (employee.branch != null)
                   _Tag(Icons.apartment_outlined, employee.branch!),
+                if (employee.supervisorNames.isEmpty)
+                  const _Tag(
+                    Icons.supervisor_account_outlined,
+                    'Supervisor: N/A',
+                  )
+                else
+                  ...employee.supervisorNames.map(
+                    (name) => _Tag(
+                      Icons.supervisor_account_outlined,
+                      'Supervisor: $name',
+                    ),
+                  ),
                 _Tag(
                   employee.hasCredentials
                       ? Icons.verified_user_outlined

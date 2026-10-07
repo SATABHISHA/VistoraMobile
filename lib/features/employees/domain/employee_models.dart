@@ -66,6 +66,7 @@ class ManagedEmployee {
     this.departmentId,
     this.designationId,
     this.supervisorIds = const [],
+    this.supervisorNames = const [],
     this.emergencyContactName,
     this.emergencyContactPhone,
     this.emergencyContactRelation,
@@ -119,6 +120,7 @@ class ManagedEmployee {
   final int? departmentId;
   final int? designationId;
   final List<int> supervisorIds;
+  final List<String> supervisorNames;
   final String? emergencyContactName;
   final String? emergencyContactPhone;
   final String? emergencyContactRelation;
@@ -129,6 +131,24 @@ class ManagedEmployee {
   factory ManagedEmployee.fromJson(Map<String, dynamic> json) {
     final salary = asMap(json['current_salary']);
     final user = asMap(json['user']);
+    final reportingManager = asMap(json['reporting_manager']);
+    final supervisors = asList(json['supervisors']);
+    final supervisorNames = supervisors
+        .map((item) {
+          final supervisor = asMap(item);
+          final name = supervisor['name']?.toString().trim();
+          if (name?.isNotEmpty == true) return name!;
+          return [
+            supervisor['first_name']?.toString() ?? '',
+            supervisor['last_name']?.toString() ?? '',
+          ].where((part) => part.trim().isNotEmpty).join(' ').trim();
+        })
+        .where((name) => name.isNotEmpty)
+        .toList();
+    final reportingManagerName = [
+      reportingManager['first_name']?.toString() ?? '',
+      reportingManager['last_name']?.toString() ?? '',
+    ].where((part) => part.trim().isNotEmpty).join(' ').trim();
     return ManagedEmployee(
       id: asInt(json['id']),
       code: json['emp_code']?.toString() ?? '',
@@ -154,9 +174,9 @@ class ManagedEmployee {
       nationality: asNullableString(json['nationality']),
       state: asNullableString(asMap(json['state'])['name']),
       businessUnit: asNullableString(asMap(json['business_unit'])['name']),
-      reportingManager: asNullableString(
-        asMap(json['reporting_manager'])['first_name'],
-      ),
+      reportingManager: reportingManagerName.isEmpty
+          ? null
+          : reportingManagerName,
       joiningDate: asDateTime(json['doj']),
       prefix: asNullableString(json['prefix']),
       personalEmail: asNullableString(json['personal_email']),
@@ -186,9 +206,13 @@ class ManagedEmployee {
       ),
       departmentId: _relationId(json['department'], json['department_id']),
       designationId: _relationId(json['designation'], json['designation_id']),
-      supervisorIds: asList(
-        json['supervisors'],
-      ).map((item) => asInt(asMap(item)['id'])).where((id) => id > 0).toList(),
+      supervisorIds: supervisors
+          .map((item) => asInt(asMap(item)['id']))
+          .where((id) => id > 0)
+          .toList(),
+      supervisorNames: supervisorNames.isNotEmpty
+          ? supervisorNames
+          : (reportingManagerName.isEmpty ? const [] : [reportingManagerName]),
       emergencyContactName: asNullableString(json['emergency_contact_name']),
       emergencyContactPhone: asNullableString(json['emergency_contact_phone']),
       emergencyContactRelation: asNullableString(

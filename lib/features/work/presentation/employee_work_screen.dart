@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:vistora_mobile/core/widgets/async_state_view.dart';
+import 'package:vistora_mobile/core/widgets/interview_action_confirmation.dart';
 import 'package:vistora_mobile/core/widgets/status_badge.dart';
 import 'package:vistora_mobile/features/auth/presentation/auth_controller.dart';
 import 'package:vistora_mobile/features/work/domain/employee_work_models.dart';
@@ -1946,7 +1947,7 @@ class _InterviewsTabState extends ConsumerState<_InterviewsTab> {
         onResume: task.resumeName == null ? null : () => _downloadResume(task),
       ),
     );
-    if (saved == true && mounted) await _reload();
+    if (saved == true && mounted) await _reload(reset: true);
   }
 
   Future<void> _downloadResume(InterviewTask task) async {
@@ -2220,6 +2221,8 @@ class _InterviewFeedbackSheetState
   late int rating;
   late String recommendation;
   late TextEditingController feedback;
+  late FocusNode feedbackFocus;
+  String? validationMessage;
   bool saving = false;
 
   @override
@@ -2228,25 +2231,46 @@ class _InterviewFeedbackSheetState
     rating = widget.existing?.rating ?? 5;
     recommendation = widget.existing?.recommendation ?? 'hire';
     feedback = TextEditingController(text: widget.existing?.feedback);
+    feedbackFocus = FocusNode();
   }
 
   @override
   void dispose() {
     feedback.dispose();
+    feedbackFocus.dispose();
     super.dispose();
   }
 
   Future<void> submit() async {
-    if (feedback.text.trim().isEmpty) return;
+    if (saving) return;
+    final feedbackText = feedback.text.trim();
+    if (feedbackText.isEmpty) {
+      setState(() {
+        validationMessage =
+            'Please enter interview feedback before submitting.';
+      });
+      feedbackFocus.requestFocus();
+      return;
+    }
+    setState(() => validationMessage = null);
     setState(() => saving = true);
     try {
+      final confirmed = await confirmInterviewAction(
+        context,
+        title: widget.existing == null
+            ? 'Submit interview feedback?'
+            : 'Update interview feedback?',
+        message:
+            'Save your rating, recommendation and feedback for ${widget.task.candidateName}?',
+      );
+      if (!confirmed || !mounted) return;
       await ref
           .read(employeeWorkRepositoryProvider)
           .submitInterviewFeedback(
             interviewId: widget.task.id,
             rating: rating,
             recommendation: recommendation,
-            feedback: feedback.text.trim(),
+            feedback: feedbackText,
           );
       if (mounted) Navigator.pop(context, true);
     } catch (error) {
@@ -2369,13 +2393,74 @@ class _InterviewFeedbackSheetState
           const SizedBox(height: 12),
           TextField(
             controller: feedback,
+            focusNode: feedbackFocus,
             minLines: 4,
             maxLines: 7,
             maxLength: 5000,
-            decoration: const InputDecoration(
+            onChanged: (value) {
+              if (validationMessage != null && value.trim().isNotEmpty) {
+                setState(() => validationMessage = null);
+              }
+            },
+            decoration: InputDecoration(
               labelText: 'Interview feedback',
               alignLabelWithHint: true,
+              errorText: validationMessage == null ? null : 'Feedback required',
             ),
+          ),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 220),
+            transitionBuilder: (child, animation) => FadeTransition(
+              opacity: animation,
+              child: SlideTransition(
+                position: Tween<Offset>(
+                  begin: const Offset(0, -0.15),
+                  end: Offset.zero,
+                ).animate(animation),
+                child: child,
+              ),
+            ),
+            child: validationMessage == null
+                ? const SizedBox(key: ValueKey('feedback-valid'))
+                : Container(
+                    key: const ValueKey('feedback-invalid'),
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF7E2442), Color(0xFFD94362)],
+                      ),
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x553D0B20),
+                          blurRadius: 14,
+                          offset: Offset(0, 6),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.info_outline_rounded,
+                          color: Colors.white,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            validationMessage!,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
           ),
           FilledButton(
             onPressed: saving ? null : submit,
