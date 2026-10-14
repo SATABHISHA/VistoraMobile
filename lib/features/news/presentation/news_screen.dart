@@ -336,7 +336,7 @@ class _NewsComposerState extends ConsumerState<_NewsComposer> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              initialValue: _scope,
+              value: _scope,
               decoration: const InputDecoration(labelText: 'Audience'),
               items: const [
                 DropdownMenuItem(value: 'all', child: Text('All tenants')),
@@ -362,7 +362,7 @@ class _NewsComposerState extends ConsumerState<_NewsComposer> {
                   final tenants =
                       snapshot.data?.tenants ?? const <NewsTenantTarget>[];
                   return DropdownButtonFormField<String>(
-                    initialValue: _corpId,
+                    value: _corpId,
                     decoration: const InputDecoration(labelText: 'Tenant'),
                     items: tenants
                         .map(
