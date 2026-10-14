@@ -18,6 +18,7 @@ import 'package:vistora_mobile/features/leave/presentation/leave_screen.dart';
 import 'package:vistora_mobile/features/holidays/presentation/holidays_screen.dart';
 import 'package:vistora_mobile/features/hr_operations/presentation/hr_operations_screen.dart';
 import 'package:vistora_mobile/features/mr/presentation/mr_screen.dart';
+import 'package:vistora_mobile/features/news/presentation/news_screen.dart';
 import 'package:vistora_mobile/features/payslips/presentation/payslips_screen.dart';
 import 'package:vistora_mobile/features/payroll/presentation/payroll_admin_screen.dart';
 import 'package:vistora_mobile/features/platform_admin/presentation/platform_admin_screen.dart';
@@ -155,6 +156,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const DashboardScreen(),
           ),
           GoRoute(
+            path: '/news',
+            builder: (context, state) => const NewsScreen(),
+          ),
+          GoRoute(
             path: '/profile',
             builder: (context, state) => const ProfileScreen(),
           ),
@@ -245,6 +250,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             path: '/platform/onboarding',
             builder: (context, state) =>
                 const PlatformAdminScreen(initialIndex: 3),
+          ),
+          GoRoute(
+            path: '/platform/news',
+            builder: (context, state) => const NewsAdminScreen(),
           ),
           GoRoute(
             path: '/platform/settings',

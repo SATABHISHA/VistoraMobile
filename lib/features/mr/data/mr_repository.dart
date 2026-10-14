@@ -172,10 +172,12 @@ class MrRepository {
   Future<Map<String, dynamic>> expenseReport({
     String? query,
     String? status,
+    int? employeeId,
     int? year,
     int? month,
     String? dateFrom,
     String? dateTo,
+    bool reviewable = false,
     String view = 'details',
     int page = 1,
     int perPage = 10,
@@ -184,11 +186,13 @@ class MrRepository {
     queryParameters: {
       'q': ?query,
       'status': ?status,
+      'employee_id': ?employeeId,
       'year': ?year,
       'month': ?month,
       'date_from': ?dateFrom,
       'date_to': ?dateTo,
       'view': view,
+      if (reviewable) 'reviewable': 1,
       'page': page,
       'per_page': perPage,
     },
@@ -197,13 +201,38 @@ class MrRepository {
   Future<Response<List<int>>> exportExpenseReport({
     String? query,
     String? status,
+    int? employeeId,
     int? year,
     int? month,
     String? dateFrom,
     String? dateTo,
     bool details = false,
+    bool reviewable = false,
   }) => _api.download(
     '/mr/expense-report/export',
+    queryParameters: {
+      'q': ?query,
+      'status': ?status,
+      'employee_id': ?employeeId,
+      'year': ?year,
+      'month': ?month,
+      'date_from': ?dateFrom,
+      'date_to': ?dateTo,
+      if (details) 'details': 1,
+      if (reviewable) 'reviewable': 1,
+    },
+  );
+
+  Future<Response<List<int>>> exportAllExpenseReport({
+    String? query,
+    String? status,
+    int? year,
+    int? month,
+    String? dateFrom,
+    String? dateTo,
+    bool reviewable = false,
+  }) => _api.download(
+    '/mr/expense-report/export-all',
     queryParameters: {
       'q': ?query,
       'status': ?status,
@@ -211,7 +240,7 @@ class MrRepository {
       'month': ?month,
       'date_from': ?dateFrom,
       'date_to': ?dateTo,
-      if (details) 'details': 1,
+      if (reviewable) 'reviewable': 1,
     },
   );
 
@@ -254,6 +283,17 @@ class MrRepository {
   Future<void> submitExpenseClaim(int id) =>
       _api.post('/mr/expense-claims/$id/submit');
 
+  Future<Map<String, dynamic>> submitExpenseMonth({
+    required int year,
+    required int month,
+  }) async {
+    final response = await _api.post(
+      '/mr/expense-claims/submit-month',
+      data: {'year': year, 'month': month},
+    );
+    return asMap(response['data']);
+  }
+
   Future<void> rollbackExpenseClaim(int id, String notes) => _api.post(
     '/mr/expense-claims/$id/rollback-submission',
     data: {'rollback_notes': notes},
@@ -272,6 +312,29 @@ class MrRepository {
 
   Future<void> revertExpenseReview(int id, String notes) =>
       _api.post('/mr/expense-claims/$id/revert', data: {'review_notes': notes});
+
+  Future<Map<String, dynamic>> reviewExpenseMonth({
+    required int employeeId,
+    required int year,
+    required int month,
+    required String action,
+    String? notes,
+    Iterable<int>? claimIds,
+    bool rejectAll = false,
+  }) async {
+    final response = await _api.post(
+      '/mr/expense-report/$employeeId/$action-month',
+      data: {
+        'year': year,
+        'month': month,
+        if (action == 'reject') 'reject_all': rejectAll,
+        if (claimIds != null) 'claim_ids': claimIds.toList(),
+        if (notes != null && notes.trim().isNotEmpty)
+          'review_notes': notes.trim(),
+      },
+    );
+    return asMap(response['data']);
+  }
 
   Future<void> saveDoctor({int? id, required Map<String, dynamic> data}) =>
       id == null

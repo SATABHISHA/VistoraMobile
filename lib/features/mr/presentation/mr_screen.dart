@@ -152,9 +152,9 @@ class MrScreen extends ConsumerWidget {
                 else if (section == _MrSection.myExpenses)
                   const MrExpenseClaimsView(mine: true)
                 else if (section == _MrSection.expenseApprovals)
-                  const MrExpenseClaimsView(reviewable: true)
+                  const MrExpenseReportView(reviewable: true)
                 else if (section == _MrSection.expenseReport)
-                  const MrExpenseReportView()
+                  const MrExpenseReportView(reviewable: true)
                 else
                   _RecordsView(section: section, role: role),
             ],
@@ -181,7 +181,7 @@ class _RecordsViewState extends ConsumerState<_RecordsView> {
   DateTime? _date;
   int? _year;
   int _page = 1;
-  int _perPage = 10;
+  int _perPage = 5;
   bool _mutating = false;
   late Future<MrPage<Object>> _future;
 
@@ -1297,6 +1297,8 @@ class _FilterPanel extends StatelessWidget {
                     value: perPage,
                     decoration: const InputDecoration(labelText: 'Per page'),
                     items: const [
+                      DropdownMenuItem(value: 3, child: Text('3')),
+                      DropdownMenuItem(value: 5, child: Text('5')),
                       DropdownMenuItem(value: 10, child: Text('10')),
                       DropdownMenuItem(value: 20, child: Text('20')),
                       DropdownMenuItem(value: 50, child: Text('50')),

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,7 +13,9 @@ import 'package:vistora_mobile/features/mr/data/mr_repository.dart';
 import 'package:vistora_mobile/features/mr/presentation/mr_providers.dart';
 
 class MrExpenseReportView extends ConsumerStatefulWidget {
-  const MrExpenseReportView({super.key});
+  const MrExpenseReportView({super.key, this.reviewable = false});
+
+  final bool reviewable;
 
   @override
   ConsumerState<MrExpenseReportView> createState() =>
@@ -29,10 +32,14 @@ class _MrExpenseReportViewState extends ConsumerState<MrExpenseReportView> {
   DateTime? _dateFrom;
   DateTime? _dateTo;
   int _page = 1;
-  int _perPage = 10;
-  String _viewMode = 'details';
+  int _perPage = 5;
+  String _viewMode = 'summary';
+  int? _employeeId;
   bool _loading = true;
   bool _exporting = false;
+  bool _exportingAll = false;
+  bool _mutatingMonth = false;
+  bool _loadingReviewClaims = false;
   String? _error;
 
   MrRepository get _repository => ref.read(mrRepositoryProvider);
@@ -40,6 +47,11 @@ class _MrExpenseReportViewState extends ConsumerState<MrExpenseReportView> {
   @override
   void initState() {
     super.initState();
+    if (widget.reviewable) {
+      final now = DateTime.now();
+      _year = now.year;
+      _month = now.month;
+    }
     _refresh();
   }
 
@@ -65,10 +77,12 @@ class _MrExpenseReportViewState extends ConsumerState<MrExpenseReportView> {
       final response = await _repository.expenseReport(
         query: _search.text.trim().isEmpty ? null : _search.text.trim(),
         status: _status,
+        employeeId: _employeeId,
         year: _year,
         month: _month,
         dateFrom: _from,
         dateTo: _to,
+        reviewable: widget.reviewable,
         view: _viewMode,
         page: _page,
         perPage: _perPage,
@@ -109,17 +123,19 @@ class _MrExpenseReportViewState extends ConsumerState<MrExpenseReportView> {
     await _refresh(resetPage: true);
   }
 
-  Future<void> _export({bool details = false}) async {
+  Future<void> _export({bool details = false, int? employeeId}) async {
     setState(() => _exporting = true);
     try {
       final response = await _repository.exportExpenseReport(
         query: _search.text.trim().isEmpty ? null : _search.text.trim(),
         status: _status,
+        employeeId: employeeId,
         year: _year,
         month: _month,
         dateFrom: _from,
         dateTo: _to,
         details: details,
+        reviewable: widget.reviewable,
       );
       final bytes = response.data ?? const <int>[];
       final isXlsx =
@@ -138,7 +154,7 @@ class _MrExpenseReportViewState extends ConsumerState<MrExpenseReportView> {
           ? 'month_$_month'
           : 'till_date';
       final file = File(
-        '${directory.path}${Platform.pathSeparator}Vistora-MR-Expense-${details ? 'Details' : 'Summary'}-$period.${isXlsx ? 'xlsx' : 'csv'}',
+        '${directory.path}${Platform.pathSeparator}Vistora-MR-Expense-${employeeId == null ? '' : 'Employee-$employeeId-'}${details ? 'Details' : 'Summary'}-$period.${isXlsx ? 'xlsx' : 'csv'}',
       );
       await file.writeAsBytes(bytes, flush: true);
       await OpenFilex.open(file.path);
@@ -155,6 +171,36 @@ class _MrExpenseReportViewState extends ConsumerState<MrExpenseReportView> {
       if (mounted) _showError(error.toString());
     } finally {
       if (mounted) setState(() => _exporting = false);
+    }
+  }
+
+  Future<void> _exportAll() async {
+    setState(() => _exportingAll = true);
+    try {
+      final response = await _repository.exportAllExpenseReport(
+        query: _search.text.trim().isEmpty ? null : _search.text.trim(),
+        status: _status,
+        year: _year,
+        month: _month,
+        dateFrom: _from,
+        dateTo: _to,
+        reviewable: widget.reviewable,
+      );
+      final directory = await getTemporaryDirectory();
+      final file = File(
+        '${directory.path}${Platform.pathSeparator}Vistora-MR-Expenses-All-${_year ?? 'till-date'}${_month == null ? '' : '-$_month'}.zip',
+      );
+      await file.writeAsBytes(response.data ?? const <int>[], flush: true);
+      await OpenFilex.open(file.path);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('All MR expense reports saved: ${file.path}')),
+        );
+      }
+    } catch (error) {
+      if (mounted) _showError(error.toString());
+    } finally {
+      if (mounted) setState(() => _exportingAll = false);
     }
   }
 
@@ -178,6 +224,40 @@ class _MrExpenseReportViewState extends ConsumerState<MrExpenseReportView> {
           const SizedBox(height: 14),
           _filters(colors),
           const SizedBox(height: 14),
+          if (_loadingReviewClaims) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                gradient: const LinearGradient(
+                  colors: [Color(0xff20295a), Color(0xff102d40)],
+                ),
+                border: Border.all(
+                  color: colors.primary.withValues(alpha: .35),
+                ),
+              ),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.2,
+                      color: colors.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'Loading submitted claims for the selected month…',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
           if (_loading)
             const Padding(
               padding: EdgeInsets.all(48),
@@ -360,6 +440,8 @@ class _MrExpenseReportViewState extends ConsumerState<MrExpenseReportView> {
                 value: _perPage,
                 decoration: const InputDecoration(labelText: 'Per page'),
                 items: const [
+                  DropdownMenuItem(value: 3, child: Text('3 per page')),
+                  DropdownMenuItem(value: 5, child: Text('5 per page')),
                   DropdownMenuItem(value: 10, child: Text('10 per page')),
                   DropdownMenuItem(value: 20, child: Text('20 per page')),
                   DropdownMenuItem(value: 50, child: Text('50 per page')),
@@ -431,6 +513,18 @@ class _MrExpenseReportViewState extends ConsumerState<MrExpenseReportView> {
           spacing: 8,
           runSpacing: 8,
           children: [
+            if (_employeeId != null)
+              OutlinedButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _employeeId = null;
+                    _viewMode = 'summary';
+                  });
+                  _refresh(resetPage: true);
+                },
+                icon: const Icon(Icons.groups_outlined),
+                label: const Text('All employees'),
+              ),
             IconButton.filledTonal(
               tooltip: 'Clear all filters',
               onPressed: _clearFilters,
@@ -452,6 +546,16 @@ class _MrExpenseReportViewState extends ConsumerState<MrExpenseReportView> {
                   : const Icon(Icons.download_rounded),
               label: const Text('Details'),
             ),
+            OutlinedButton.icon(
+              onPressed: _exportingAll ? null : _exportAll,
+              icon: _exportingAll
+                  ? const SizedBox.square(
+                      dimension: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.folder_zip_outlined),
+              label: const Text('Export all ZIP'),
+            ),
           ],
         ),
       ],
@@ -462,6 +566,7 @@ class _MrExpenseReportViewState extends ConsumerState<MrExpenseReportView> {
     _search.clear();
     setState(() {
       _status = null;
+      _employeeId = null;
       _year = null;
       _month = null;
       _dateFrom = null;
@@ -752,11 +857,49 @@ class _MrExpenseReportViewState extends ConsumerState<MrExpenseReportView> {
                 ),
               ],
             ),
+            if ((row['remarks']?.toString().trim().isNotEmpty ?? false) ||
+                (row['review_notes']?.toString().trim().isNotEmpty ?? false) ||
+                (row['rollback_notes']?.toString().trim().isNotEmpty ??
+                    false)) ...[
+              const SizedBox(height: 12),
+              if (row['remarks']?.toString().trim().isNotEmpty ?? false)
+                _detailLine('Remarks', row['remarks'].toString()),
+              if (row['review_notes']?.toString().trim().isNotEmpty ?? false)
+                _detailLine('Review remarks', row['review_notes'].toString()),
+              if (row['rollback_notes']?.toString().trim().isNotEmpty ?? false)
+                _detailLine(
+                  'Rollback remarks',
+                  row['rollback_notes'].toString(),
+                ),
+            ],
           ],
         ),
       ),
     );
   }
+
+  Widget _detailLine(String label, String value) => Container(
+    width: double.infinity,
+    margin: const EdgeInsets.only(top: 8),
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+    decoration: BoxDecoration(
+      color: const Color(0xff0d142b),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: VistoraColors.muted.withValues(alpha: .18)),
+    ),
+    child: RichText(
+      text: TextSpan(
+        style: const TextStyle(color: VistoraColors.muted, fontSize: 12),
+        children: [
+          TextSpan(
+            text: '$label: ',
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
+          TextSpan(text: value),
+        ],
+      ),
+    ),
+  );
 
   Widget _summaryExpenseCard(
     Map<String, dynamic> row,
@@ -890,6 +1033,67 @@ class _MrExpenseReportViewState extends ConsumerState<MrExpenseReportView> {
               ),
             ],
           ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              OutlinedButton.icon(
+                onPressed: () {
+                  final id = _numericEmployeeId(row);
+                  if (id == null) return;
+                  setState(() {
+                    _employeeId = id;
+                    _viewMode = 'details';
+                  });
+                  _refresh(resetPage: true);
+                },
+                icon: const Icon(Icons.visibility_outlined),
+                label: const Text('View breakdown'),
+              ),
+              OutlinedButton.icon(
+                onPressed: _exporting
+                    ? null
+                    : () => _export(
+                        details: true,
+                        employeeId: _numericEmployeeId(row),
+                      ),
+                icon: const Icon(Icons.download_outlined),
+                label: const Text('Export Excel'),
+              ),
+              if (widget.reviewable && asInt(row['submitted_count']) > 0)
+                FilledButton.icon(
+                  onPressed: _mutatingMonth || _loadingReviewClaims
+                      ? null
+                      : () => _monthAction(row, 'approve'),
+                  icon: const Icon(Icons.check_circle_outline),
+                  label: const Text('Approve all submitted'),
+                ),
+              if (widget.reviewable && asInt(row['submitted_count']) > 0)
+                OutlinedButton.icon(
+                  onPressed: _mutatingMonth || _loadingReviewClaims
+                      ? null
+                      : () => _rejectMonth(row),
+                  icon: const Icon(Icons.cancel_outlined),
+                  label: const Text('Reject claims'),
+                ),
+              if (widget.reviewable &&
+                  (asInt(row['approved_count']) > 0 ||
+                      asInt(row['rejected_count']) > 0))
+                TextButton.icon(
+                  onPressed: _mutatingMonth || _loadingReviewClaims
+                      ? null
+                      : () => _monthAction(row, 'revert'),
+                  icon: const Icon(Icons.settings_backup_restore),
+                  label: const Text('Revert review'),
+                ),
+              if (widget.reviewable && (_month == null || _year == null))
+                const Text(
+                  'Review actions will ask you to choose the exact year and month.',
+                  style: TextStyle(color: VistoraColors.muted, fontSize: 11),
+                ),
+            ],
+          ),
         ],
       ),
     ),
@@ -910,6 +1114,600 @@ class _MrExpenseReportViewState extends ConsumerState<MrExpenseReportView> {
 
   String employeeId(Map<String, dynamic> row) =>
       asMap(row['employee'])['emp_code']?.toString() ?? 'No employee ID';
+
+  int? _numericEmployeeId(Map<String, dynamic> row) {
+    final value = row['employee_id'] ?? asMap(row['employee'])['id'];
+    return int.tryParse(value?.toString() ?? '');
+  }
+
+  Future<Map<String, int>?> _chooseReviewPeriod(String action) {
+    final now = DateTime.now();
+    var selectedYear = _year ?? now.year;
+    var selectedMonth = _month ?? now.month;
+    final actionLabel = switch (action) {
+      'approve' => 'approve',
+      'reject' => 'reject',
+      _ => 'revert review for',
+    };
+    return showDialog<Map<String, int>>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, dialogSetState) => AlertDialog(
+          title: const Text('Choose review month'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Select the exact month to $actionLabel. This employee card may contain claims from more than one month.',
+                  style: const TextStyle(color: VistoraColors.muted),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<int>(
+                  value: selectedYear,
+                  decoration: const InputDecoration(labelText: 'Year'),
+                  items: [
+                    for (var year = now.year; year >= 2020; year--)
+                      DropdownMenuItem(value: year, child: Text('$year')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null)
+                      dialogSetState(() => selectedYear = value);
+                  },
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<int>(
+                  value: selectedMonth,
+                  decoration: const InputDecoration(labelText: 'Month'),
+                  items: [
+                    for (var month = 1; month <= 12; month++)
+                      DropdownMenuItem(
+                        value: month,
+                        child: Text(
+                          DateFormat('MMMM').format(DateTime(2020, month)),
+                        ),
+                      ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null)
+                      dialogSetState(() => selectedMonth = value);
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, {
+                'year': selectedYear,
+                'month': selectedMonth,
+              }),
+              child: const Text('Continue'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _rejectMonth(Map<String, dynamic> row) async {
+    final employee = _numericEmployeeId(row);
+    if (employee == null) {
+      _showError(
+        'The employee for this expense summary could not be identified.',
+      );
+      return;
+    }
+    var year = _year;
+    var month = _month;
+    if (year == null || month == null) {
+      final period = await _chooseReviewPeriod('reject');
+      if (period == null || !mounted) return;
+      final selectedYear = period['year'];
+      final selectedMonth = period['month'];
+      if (selectedYear == null || selectedMonth == null) {
+        _showError('Please select a valid review year and month.');
+        return;
+      }
+      year = selectedYear;
+      month = selectedMonth;
+    }
+
+    if (mounted) {
+      setState(() => _loadingReviewClaims = true);
+    }
+
+    try {
+      final claims = <Map<String, dynamic>>[];
+      var pageNumber = 1;
+      var lastPage = 1;
+      do {
+        final response = await _repository.expenseReport(
+          employeeId: employee,
+          year: year,
+          month: month,
+          reviewable: widget.reviewable,
+          view: 'details',
+          page: pageNumber,
+          perPage: 100,
+        );
+        final data = asMap(response['data']);
+        final page = asMap(data['items']);
+        claims.addAll(
+          asList(page['data'])
+              .map(asMap)
+              .where((claim) => claim['status']?.toString() == 'submitted'),
+        );
+        lastPage = asInt(page['last_page']) > 0
+            ? asInt(page['last_page'])
+            : pageNumber;
+        pageNumber += 1;
+      } while (pageNumber <= lastPage);
+
+      if (mounted) {
+        setState(() => _loadingReviewClaims = false);
+      }
+
+      if (claims.isEmpty) {
+        await _showReviewNotice(
+          'No submitted claims found',
+          'There are no submitted claims available to reject for ${DateFormat('MMMM yyyy').format(DateTime(year, month))}. Choose another month and try again.',
+        );
+        return;
+      }
+
+      final selection = await showDialog<Map<String, dynamic>>(
+        context: context,
+        builder: (dialogContext) {
+          final notesController = TextEditingController();
+          var rejectAll = true;
+          final selected = <int>{};
+          var claimPage = 1;
+          var claimPageSize = 5;
+          String? validation;
+          return StatefulBuilder(
+            builder: (context, dialogSetState) {
+              final dialogHeight = math.min(
+                MediaQuery.sizeOf(context).height * .65,
+                620.0,
+              );
+              final lastClaimPage =
+                  (claims.length + claimPageSize - 1) ~/ claimPageSize;
+              final pageStart = (claimPage - 1) * claimPageSize;
+              final visibleClaims = claims
+                  .skip(pageStart)
+                  .take(claimPageSize)
+                  .toList();
+              return AlertDialog(
+                title: const Text('Reject employee claims'),
+                insetPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 24,
+                ),
+                content: SizedBox(
+                  width: double.maxFinite,
+                  height: dialogHeight,
+                  child: ListView(
+                    padding: EdgeInsets.zero,
+                    children: [
+                      const Text(
+                        'Reject every submitted claim or choose only the claims that need correction. Remarks are required.',
+                        style: TextStyle(color: VistoraColors.muted),
+                      ),
+                      const SizedBox(height: 10),
+                      RadioListTile<bool>(
+                        value: true,
+                        groupValue: rejectAll,
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Reject all submitted claims'),
+                        subtitle: Text(
+                          '${claims.length} submitted claim(s) in this month',
+                        ),
+                        onChanged: (value) =>
+                            dialogSetState(() => rejectAll = value ?? true),
+                      ),
+                      RadioListTile<bool>(
+                        value: false,
+                        groupValue: rejectAll,
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Reject specific claim(s)'),
+                        subtitle: const Text('Select one or more claims below'),
+                        onChanged: (value) =>
+                            dialogSetState(() => rejectAll = value ?? false),
+                      ),
+                      const SizedBox(height: 4),
+                      Container(
+                        height: 220,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: .12),
+                          ),
+                        ),
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 240),
+                          child: ListView.builder(
+                            key: ValueKey(
+                              '$claimPage-$claimPageSize-$rejectAll',
+                            ),
+                            itemCount: visibleClaims.length,
+                            itemBuilder: (context, index) {
+                              final claim = visibleClaims[index];
+                              final claimId = asInt(claim['id']);
+                              final duty = _title(
+                                claim['duty_type']?.toString() ?? '',
+                              );
+                              final brief =
+                                  [
+                                        duty,
+                                        claim['area_covered']?.toString(),
+                                        claim['mode_of_travel']?.toString(),
+                                      ]
+                                      .where(
+                                        (value) =>
+                                            value != null && value.isNotEmpty,
+                                      )
+                                      .join(' Â· ');
+                              return CheckboxListTile(
+                                value: selected.contains(claimId),
+                                enabled: !rejectAll,
+                                dense: true,
+                                controlAffinity:
+                                    ListTileControlAffinity.leading,
+                                title: Text(
+                                  '${_shortDate(claim['expense_date']?.toString())} Â· ${_money(claim['total_expense'])}',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  brief.isEmpty ? 'Expense claim' : brief,
+                                ),
+                                onChanged: (checked) => dialogSetState(() {
+                                  if (checked == true) {
+                                    selected.add(claimId);
+                                  } else {
+                                    selected.remove(claimId);
+                                  }
+                                }),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '${claims.length} submitted claims',
+                              style: const TextStyle(
+                                color: VistoraColors.muted,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                          const Text('Rows', style: TextStyle(fontSize: 12)),
+                          const SizedBox(width: 6),
+                          DropdownButton<int>(
+                            value: claimPageSize,
+                            isDense: true,
+                            underline: const SizedBox.shrink(),
+                            items: const [3, 5, 10, 20, 50]
+                                .map(
+                                  (size) => DropdownMenuItem<int>(
+                                    value: size,
+                                    child: Text('$size'),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (value) {
+                              if (value == null) return;
+                              dialogSetState(() {
+                                claimPageSize = value;
+                                claimPage = 1;
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          IconButton(
+                            tooltip: 'Previous claims',
+                            onPressed: claimPage > 1
+                                ? () => dialogSetState(() => claimPage--)
+                                : null,
+                            icon: const Icon(Icons.chevron_left_rounded),
+                          ),
+                          Expanded(
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 180),
+                              child: Text(
+                                'Page $claimPage of $lastClaimPage',
+                                key: ValueKey('$claimPage-$lastClaimPage'),
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  color: VistoraColors.muted,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Next claims',
+                            onPressed: claimPage < lastClaimPage
+                                ? () => dialogSetState(() => claimPage++)
+                                : null,
+                            icon: const Icon(Icons.chevron_right_rounded),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: notesController,
+                        maxLines: 4,
+                        maxLength: 2000,
+                        decoration: const InputDecoration(
+                          labelText: 'Remarks (required)',
+                          hintText: 'Explain what the MR needs to correct...',
+                        ),
+                      ),
+                      if (validation != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          validation!,
+                          style: const TextStyle(
+                            color: Color(0xffff8fa3),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(dialogContext),
+                    child: const Text('Cancel'),
+                  ),
+                  FilledButton(
+                    onPressed: () {
+                      final notes = notesController.text.trim();
+                      if (notes.isEmpty) {
+                        dialogSetState(
+                          () => validation =
+                              'Please enter remarks before rejecting claims.',
+                        );
+                        return;
+                      }
+                      if (!rejectAll && selected.isEmpty) {
+                        dialogSetState(
+                          () => validation =
+                              'Select at least one claim to reject.',
+                        );
+                        return;
+                      }
+                      Navigator.pop(dialogContext, {
+                        'reject_all': rejectAll,
+                        'claim_ids': selected.toList(),
+                        'notes': notes,
+                      });
+                    },
+                    child: const Text('Continue'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+      if (!mounted || selection == null) return;
+
+      final rejectAll = selection['reject_all'] == true;
+      final claimIds = asList(
+        selection['claim_ids'],
+      ).map(asInt).where((id) => id > 0).toList();
+      final count = rejectAll ? claims.length : claimIds.length;
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Confirm claim rejection'),
+          content: Text(
+            rejectAll
+                ? 'All $count submitted claim(s) for this employee and month will be rejected.'
+                : '$count selected claim(s) will be rejected. Other submitted claims will remain unchanged.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Reject claims'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+
+      setState(() => _mutatingMonth = true);
+      try {
+        final response = await _repository.reviewExpenseMonth(
+          employeeId: employee,
+          year: year!,
+          month: month!,
+          action: 'reject',
+          notes: selection['notes']?.toString(),
+          claimIds: rejectAll ? null : claimIds,
+          rejectAll: rejectAll,
+        );
+        await _refresh();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                '${asInt(response['updated'])} claim(s) rejected for the month.',
+              ),
+            ),
+          );
+        }
+      } catch (error) {
+        if (mounted) _showError(error.toString());
+      } finally {
+        if (mounted) setState(() => _mutatingMonth = false);
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() => _loadingReviewClaims = false);
+        await _showReviewNotice(
+          'Could not load claims',
+          error.toString().replaceFirst('Exception: ', ''),
+        );
+        _showError(
+          'Could not load the selected month’s claims: ${error.toString()}',
+        );
+      }
+    }
+  }
+
+  Future<void> _showReviewNotice(String title, String message) async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(title),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+        content: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(dialogContext).height * .45,
+          ),
+          child: SingleChildScrollView(child: Text(message)),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _monthAction(Map<String, dynamic> row, String action) async {
+    final employee = _numericEmployeeId(row);
+    if (employee == null) {
+      _showError(
+        'The employee for this expense summary could not be identified.',
+      );
+      return;
+    }
+    var year = _year;
+    var month = _month;
+    if (year == null || month == null) {
+      final period = await _chooseReviewPeriod(action);
+      if (period == null || !mounted) return;
+      year = period['year'];
+      month = period['month'];
+    }
+    String? notes;
+    if (action != 'approve') {
+      notes = await _reviewNotes(
+        action == 'reject'
+            ? 'Reject monthly expenses'
+            : 'Revert monthly review',
+      );
+      if (notes == null) return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(
+          action == 'approve'
+              ? 'Approve this month?'
+              : action == 'reject'
+              ? 'Reject this month?'
+              : 'Revert this month?',
+        ),
+        content: Text(
+          action == 'approve'
+              ? 'All submitted claims for this employee and month will be approved.'
+              : 'The selected employee month will be updated with the recorded remarks.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Confirm'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _mutatingMonth = true);
+    try {
+      final response = await _repository.reviewExpenseMonth(
+        employeeId: employee,
+        year: year!,
+        month: month!,
+        action: action,
+        notes: notes,
+      );
+      await _refresh();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${asInt(response['updated'])} claim(s) updated for the month.',
+            ),
+          ),
+        );
+      }
+    } catch (error) {
+      if (mounted) _showError(error.toString());
+    } finally {
+      if (mounted) setState(() => _mutatingMonth = false);
+    }
+  }
+
+  Future<String?> _reviewNotes(String title) => showDialog<String>(
+    context: context,
+    builder: (dialogContext) {
+      final controller = TextEditingController();
+      return AlertDialog(
+        title: Text(title),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLines: 4,
+          maxLength: 2000,
+          decoration: const InputDecoration(labelText: 'Remarks (required)'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (controller.text.trim().isEmpty) return;
+              Navigator.pop(dialogContext, controller.text.trim());
+            },
+            child: const Text('Continue'),
+          ),
+        ],
+      );
+    },
+  );
 
   Widget _statusChip(String label, int count, ColorScheme colors) {
     final tint = switch (label) {

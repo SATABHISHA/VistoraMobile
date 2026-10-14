@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:vistora_mobile/app/providers.dart';
 import 'package:vistora_mobile/app/theme/app_theme.dart';
 import 'package:vistora_mobile/core/api/api_parsing.dart';
@@ -16,6 +17,8 @@ import 'package:vistora_mobile/features/holidays/presentation/holiday_providers.
 import 'package:vistora_mobile/features/leave/presentation/leave_providers.dart';
 import 'package:vistora_mobile/features/mr/domain/mr_models.dart';
 import 'package:vistora_mobile/features/mr/presentation/mr_providers.dart';
+import 'package:vistora_mobile/features/news/domain/news_models.dart';
+import 'package:vistora_mobile/features/news/presentation/news_screen.dart';
 import 'package:vistora_mobile/features/work/domain/employee_work_models.dart';
 import 'package:vistora_mobile/features/work/presentation/employee_work_providers.dart';
 
@@ -112,6 +115,7 @@ Future<void> _openInterviewNotification(
     }
   }
   ref.invalidate(dashboardInterviewNotificationsProvider);
+  ref.invalidate(dashboardNewsProvider);
   if (context.mounted) context.go('/interviews');
 }
 
@@ -120,6 +124,9 @@ Future<void> refreshDashboardData(WidgetRef ref, AuthSession session) async {
   final companyManager = const {'admin', 'hr'}.contains(role);
   final managesLeave = companyManager || role == 'supervisor';
   final futures = <Future<void>>[];
+
+  ref.invalidate(dashboardNewsProvider);
+  futures.add(ref.read(dashboardNewsProvider.future).then((_) {}));
 
   ref.invalidate(upcomingHolidaysProvider);
   futures.add(ref.read(upcomingHolidaysProvider.future).then((_) {}));
@@ -202,6 +209,7 @@ class DashboardScreen extends ConsumerWidget {
         const {'employee', 'supervisor'}.contains(role)
         ? ref.watch(dashboardInterviewNotificationsProvider)
         : null;
+    final newsPopup = ref.watch(dashboardNewsProvider);
     final assignedProjects =
         session.employeeId != null &&
             session.features.projects &&
@@ -249,6 +257,31 @@ class DashboardScreen extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _Hero(session: session),
+              newsPopup.when(
+                loading: () => const SizedBox.shrink(),
+                error: (_, _) => const SizedBox.shrink(),
+                data: (item) => item == null
+                    ? const SizedBox.shrink()
+                    : _DashboardNewsPopup(item: item),
+              ),
+              const SizedBox(height: 14),
+              Card(
+                child: ListTile(
+                  leading: const CircleAvatar(
+                    backgroundColor: VistoraColors.orange,
+                    child: Icon(Icons.auto_awesome, color: Colors.white),
+                  ),
+                  title: const Text(
+                    'Vistora News',
+                    style: TextStyle(fontWeight: FontWeight.w900),
+                  ),
+                  subtitle: const Text(
+                    'Read the latest announcements and updates.',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.go('/news'),
+                ),
+              ),
               if (interviewNotifications != null)
                 interviewNotifications.when(
                   loading: () => const SizedBox.shrink(),
@@ -556,6 +589,12 @@ class DashboardScreen extends ConsumerWidget {
           '/platform/onboarding',
         ),
         const _Module(
+          'Vistora News',
+          Icons.campaign_outlined,
+          VistoraColors.amber,
+          '/platform/news',
+        ),
+        const _Module(
           'Support Tickets',
           Icons.support_agent_outlined,
           VistoraColors.cyan,
@@ -576,6 +615,12 @@ class DashboardScreen extends ConsumerWidget {
         Icons.event_available_outlined,
         VistoraColors.cyan,
         '/attendance',
+      ),
+      const _Module(
+        'Vistora News',
+        Icons.campaign_outlined,
+        VistoraColors.orange,
+        '/news',
       ),
       const _Module(
         'Leave',
@@ -1362,6 +1407,84 @@ class _Module {
   final IconData icon;
   final Color color;
   final String? route;
+}
+
+class _DashboardNewsPopup extends ConsumerStatefulWidget {
+  const _DashboardNewsPopup({required this.item});
+
+  final NewsItem item;
+
+  @override
+  ConsumerState<_DashboardNewsPopup> createState() =>
+      _DashboardNewsPopupState();
+}
+
+class _DashboardNewsPopupState extends ConsumerState<_DashboardNewsPopup> {
+  bool _shown = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _show());
+  }
+
+  Future<void> _show() async {
+    if (_shown || !mounted) return;
+    _shown = true;
+    final dismiss = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.auto_awesome, color: VistoraColors.orange),
+            const SizedBox(width: 8),
+            Expanded(child: Text(widget.item.title)),
+          ],
+        ),
+        content: SingleChildScrollView(child: Text(widget.item.message)),
+        actions: [
+          if (widget.item.linkUrl?.isNotEmpty == true)
+            TextButton(
+              onPressed: () => launchUrl(
+                Uri.parse(widget.item.linkUrl!),
+                mode: LaunchMode.externalApplication,
+              ),
+              child: const Text('Open link'),
+            ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              context.go('/news');
+            },
+            child: const Text('View all'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Dismiss'),
+          ),
+        ],
+      ),
+    );
+    if (dismiss == true && mounted) {
+      await ref.read(newsRepositoryProvider).dismiss(widget.item.id);
+      ref.invalidate(dashboardNewsProvider);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Card(
+    child: ListTile(
+      leading: const Icon(Icons.campaign_outlined, color: VistoraColors.orange),
+      title: Text(
+        widget.item.title,
+        style: const TextStyle(fontWeight: FontWeight.w900),
+      ),
+      subtitle: const Text('New today · tap to open Vistora News'),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () => context.go('/news'),
+    ),
+  );
 }
 
 class _ModuleCard extends StatelessWidget {

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:vistora_mobile/app/theme/app_theme.dart';
+import 'package:vistora_mobile/core/api/api_parsing.dart';
 import 'package:vistora_mobile/features/mr/data/mr_repository.dart';
 import 'package:vistora_mobile/features/mr/domain/mr_models.dart';
 import 'package:vistora_mobile/features/mr/presentation/mr_providers.dart';
@@ -31,7 +32,7 @@ class _MrExpenseClaimsViewState extends ConsumerState<MrExpenseClaimsView> {
   int? _month;
   int? _year = DateTime.now().year;
   int _page = 1;
-  int _perPage = 10;
+  int _perPage = 5;
   bool _mutating = false;
   bool _generationLoading = false;
   String? _generationError;
@@ -191,6 +192,97 @@ class _MrExpenseClaimsViewState extends ConsumerState<MrExpenseClaimsView> {
     );
   }
 
+  Future<void> _submitMonth() async {
+    if (_mutating) return;
+    final now = DateTime.now();
+    final targetYear = _year ?? now.year;
+    final targetMonth = _month ?? now.month;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Submit All Expenses for the Month?'),
+        content: Text(
+          'Only draft expenses dated in ${DateFormat('MMMM yyyy').format(DateTime(targetYear, targetMonth))} will be submitted. Claims already submitted or approved will not be submitted again.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Submit month'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    if (_month == null || _year == null) {
+      setState(() {
+        _year = targetYear;
+        _month = targetMonth;
+      });
+    }
+    setState(() => _mutating = true);
+    try {
+      final response = await _repository.submitExpenseMonth(
+        year: targetYear,
+        month: targetMonth,
+      );
+      await _refresh();
+      if (mounted) {
+        final submitted = asInt(response['submitted']);
+        final draftClaims = asInt(
+          response['draft_claims'] ?? response['eligible_claims'],
+        );
+        final totalClaims = asInt(response['total_claims']);
+        final rejectedClaims = asInt(response['rejected_claims']);
+        final skipped = asList(response['skipped']).length;
+        final period = DateFormat(
+          'MMMM yyyy',
+        ).format(DateTime(targetYear, targetMonth));
+        final message =
+            submitted == 0 &&
+                draftClaims == 0 &&
+                totalClaims > 0 &&
+                rejectedClaims == 0
+            ? '✨ All expenses for $period are already submitted.'
+            : submitted == 0 && draftClaims == 0 && rejectedClaims > 0
+            ? 'No draft expenses for $period; $rejectedClaims rejected claim(s) need correction before resubmission.'
+            : submitted == 0 && draftClaims == 0
+            ? 'No expenses were found for $period.'
+            : submitted == 0
+            ? 'No draft expenses for $period were ready to submit${skipped > 0 ? '; $skipped skipped.' : '.'}'
+            : '✓ $submitted draft expense(s) submitted for $period${skipped > 0 ? '; $skipped skipped.' : '.'}';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(message),
+            backgroundColor:
+                submitted == 0 &&
+                    draftClaims == 0 &&
+                    totalClaims > 0 &&
+                    rejectedClaims == 0
+                ? const Color(0xff164b52)
+                : null,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error.toString()),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _mutating = false);
+    }
+  }
+
   Future<void> _pickDate() async {
     final selected = await showDatePicker(
       context: context,
@@ -220,6 +312,17 @@ class _MrExpenseClaimsViewState extends ConsumerState<MrExpenseClaimsView> {
         _filters(),
         if (widget.mine) ...[
           const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FilledButton.icon(
+              onPressed: _mutating ? null : _submitMonth,
+              icon: const Icon(Icons.fact_check_outlined),
+              label: Text(
+                'Submit All Expenses for ${DateFormat('MMMM yyyy').format(DateTime(_year ?? DateTime.now().year, _month ?? DateTime.now().month))}',
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
           Align(
             alignment: Alignment.centerLeft,
             child: FilledButton.icon(
@@ -939,7 +1042,7 @@ class _MrExpenseClaimsViewState extends ConsumerState<MrExpenseClaimsView> {
             _refresh(resetPage: true);
           },
           itemBuilder: (_) => [
-            for (final value in const [10, 20, 50])
+            for (final value in const [3, 5, 10, 20, 50])
               PopupMenuItem(value: value, child: Text('$value per page')),
           ],
           icon: const Icon(Icons.view_list_outlined),
