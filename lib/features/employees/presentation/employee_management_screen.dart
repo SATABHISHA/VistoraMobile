@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:open_filex/open_filex.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:vistora_mobile/app/providers.dart';
 import 'package:vistora_mobile/app/theme/app_theme.dart';
@@ -88,6 +89,44 @@ class _EmployeeManagementScreenState
       if (mounted) setState(() => _busy = false);
     }
   }
+
+  Future<void> _exportFile(
+    Future<String> Function() export,
+    String successMessage,
+  ) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final path = await export();
+      await OpenFilex.open(path);
+      if (mounted) _snack(successMessage);
+    } catch (error) {
+      if (mounted) _snack(error.toString(), success: false);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _exportExcel() => _exportFile(
+    () => repository.exportExcel(
+      query: _search.text.trim().isEmpty ? null : _search.text.trim(),
+      status: _status == 'all' ? null : _status,
+    ),
+    'Employee Excel export is ready.',
+  );
+
+  Future<void> _exportEmployeePdfs() => _exportFile(
+    () => repository.exportEmployeePdfZip(
+      query: _search.text.trim().isEmpty ? null : _search.text.trim(),
+      status: _status == 'all' ? null : _status,
+    ),
+    'Employee PDF ZIP is ready.',
+  );
+
+  Future<void> _exportEmployeePdf(ManagedEmployee employee) => _exportFile(
+    () => repository.exportEmployeePdf(employee.id, employee.code),
+    'Employee PDF is ready.',
+  );
 
   Future<void> _edit([ManagedEmployee? employee]) async {
     final masterRepository = TenantSettingsRepository(
@@ -551,6 +590,26 @@ class _EmployeeManagementScreenState
                   ),
                 ],
               ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _busy ? null : _exportExcel,
+                      icon: const Icon(Icons.table_view_outlined),
+                      label: const Text('Export Excel'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _busy ? null : _exportEmployeePdfs,
+                      icon: const Icon(Icons.folder_zip_outlined),
+                      label: const Text('PDFs ZIP'),
+                    ),
+                  ),
+                ],
+              ),
               const SizedBox(height: 14),
               TextField(
                 controller: _search,
@@ -628,6 +687,7 @@ class _EmployeeManagementScreenState
                         '/salary-structures?q=${Uri.encodeQueryComponent(entry.value.code)}',
                       ),
                       details: () => _showDetails(entry.value),
+                      profilePdf: () => _exportEmployeePdf(entry.value),
                     ),
                   ),
                 ),
@@ -1581,6 +1641,7 @@ class _EmployeeCard extends StatelessWidget {
     required this.attendance,
     required this.salary,
     required this.details,
+    required this.profilePdf,
   });
 
   final ManagedEmployee employee;
@@ -1591,6 +1652,7 @@ class _EmployeeCard extends StatelessWidget {
   final VoidCallback attendance;
   final VoidCallback salary;
   final VoidCallback details;
+  final VoidCallback profilePdf;
 
   @override
   Widget build(BuildContext context) {
@@ -1669,6 +1731,11 @@ class _EmployeeCard extends StatelessWidget {
                   onPressed: details,
                   icon: const Icon(Icons.visibility_outlined, size: 18),
                   label: const Text('Full details'),
+                ),
+                TextButton.icon(
+                  onPressed: busy ? null : profilePdf,
+                  icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                  label: const Text('PDF'),
                 ),
                 if (employee.designation != null)
                   _Tag(Icons.badge_outlined, employee.designation!),

@@ -1,6 +1,9 @@
+import 'dart:io';
+
 import 'package:vistora_mobile/core/api/api_client.dart';
 import 'package:vistora_mobile/core/api/api_parsing.dart';
 import 'package:vistora_mobile/features/employees/domain/employee_models.dart';
+import 'package:path_provider/path_provider.dart';
 
 class EmployeeManagementRepository {
   const EmployeeManagementRepository(this._api);
@@ -45,6 +48,25 @@ class EmployeeManagementRepository {
 
   Future<void> update({required int id, required Map<String, dynamic> data}) =>
       _api.put('/employees/$id', data: data);
+
+  Future<String> exportExcel({String? query, String? status}) => _download(
+    '/employees/export',
+    'Vistora-Employee-Directory.xlsx',
+    query: {'q': ?query, 'status': ?status},
+  );
+
+  Future<String> exportEmployeePdf(int employeeId, String employeeCode) =>
+      _download(
+        '/employees/$employeeId/profile-pdf',
+        'Employee-$employeeCode.pdf',
+      );
+
+  Future<String> exportEmployeePdfZip({String? query, String? status}) =>
+      _download(
+        '/employees/profile-pdfs.zip',
+        'Vistora-Employee-PDFs.zip',
+        query: {'q': ?query, 'status': ?status},
+      );
 
   Future<void> setActive(ManagedEmployee employee, bool active) => _api.post(
     '/employees/${employee.id}/${active ? 'activate' : 'deactivate'}',
@@ -123,5 +145,22 @@ class EmployeeManagementRepository {
       sent: asMap(response['data'])['sent'] == true,
       message: response['message']?.toString() ?? 'Unable to send login email.',
     );
+  }
+
+  Future<String> _download(
+    String path,
+    String filename, {
+    Map<String, dynamic>? query,
+  }) async {
+    final response = await _api.download(
+      path,
+      queryParameters: query?..removeWhere((key, value) => value == null),
+    );
+    final directory = await getTemporaryDirectory();
+    final output = File(
+      '${directory.path}/${DateTime.now().millisecondsSinceEpoch}-$filename',
+    );
+    await output.writeAsBytes(response.data ?? const <int>[], flush: true);
+    return output.path;
   }
 }
