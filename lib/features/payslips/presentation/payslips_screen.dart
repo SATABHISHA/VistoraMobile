@@ -769,29 +769,10 @@ class PayslipSheet extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 22),
-        _section(context, 'Attendance impact'),
-        const SizedBox(height: 10),
-        Wrap(
-          spacing: 9,
-          runSpacing: 9,
-          children: [
-            _metric('Present', '${item.presentDays}', VistoraColors.cyan),
-            _metric('Absent', '${item.absentDays}', VistoraColors.pink),
-            _metric('Half day', _days(item.halfDays), VistoraColors.amber),
-            _metric('Paid leave', '${item.paidLeaveDays}', VistoraColors.green),
-            _metric(
-              'Missing check-in',
-              '${item.missingAttendanceDays}',
-              VistoraColors.orange,
-            ),
-            _metric('Holidays', '${item.holidayDays}', VistoraColors.muted),
-          ],
-        ),
         if (item.leaveBalances.isNotEmpty) ...[
-          const SizedBox(height: 22),
+          const SizedBox(height: 14),
           _section(context, 'Leave balance'),
-          const SizedBox(height: 10),
+          const SizedBox(height: 7),
           _leaveTable(item.leaveBalances),
         ],
         const SizedBox(height: 12),
@@ -835,31 +816,6 @@ class PayslipSheet extends StatelessWidget {
       color: VistoraColors.orange,
       fontWeight: FontWeight.w900,
       letterSpacing: .8,
-    ),
-  );
-
-  static Widget _metric(String label, String value, Color color) => Container(
-    width: 126,
-    padding: const EdgeInsets.all(12),
-    decoration: BoxDecoration(
-      color: color.withValues(alpha: .09),
-      borderRadius: BorderRadius.circular(15),
-      border: Border.all(color: color.withValues(alpha: .24)),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: const TextStyle(fontSize: 11)),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: TextStyle(
-            color: color,
-            fontSize: 18,
-            fontWeight: FontWeight.w900,
-          ),
-        ),
-      ],
     ),
   );
 
